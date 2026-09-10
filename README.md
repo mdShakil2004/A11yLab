@@ -1,8 +1,9 @@
-````markdown
+```
 ---
 title: A11yLab
 description: Production-style web accessibility engineering platform for WCAG 2.2 Level AA auditing, remediation, automated testing, and CI/CD validation.
 ---
+```
 
 # A11yLab
 
