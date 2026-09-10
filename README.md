@@ -32,16 +32,10 @@ Accessibility Scan
       └── Custom Playwright Checks
       │
       ▼
-Result Normalization
+Normalize & Deduplicate
       │
       ▼
-Deduplication
-      │
-      ▼
-WCAG Classification
-      │
-      ▼
-Severity & Impact Analysis
+WCAG Mapping & Scoring
       │
       ▼
 Accessibility Report
@@ -53,13 +47,13 @@ Remediation
 Keyboard + Screen Reader Testing
       │
       ▼
-Automated Regression Testing
+Regression Testing
       │
       ▼
 CI/CD Validation
 ````
 
-A11yLab supports both **single-page accessibility scans** and **site-wide accessibility evaluation** with configurable crawling, depth, and concurrency.
+Supports both **single-page scans** and **site-wide accessibility evaluation** with configurable crawling, depth, and concurrency.
 
 ---
 
@@ -73,16 +67,15 @@ A11yLab supports both **single-page accessibility scans** and **site-wide access
 * Accessibility issue detection
 * Severity-based prioritization
 * WCAG success-criteria mapping
-* Accessibility score and grading
-* Actionable remediation recommendations
+* Accessibility scoring and grading
+* Actionable remediation guidance
 
 ## Testing
 
 * Automated accessibility testing
-* Playwright browser testing
 * axe-core analysis
 * IBM Equal Access analysis
-* Custom accessibility checks
+* Custom Playwright checks
 * Keyboard-only testing
 * Focus-management testing
 * Screen-reader testing
@@ -90,7 +83,7 @@ A11yLab supports both **single-page accessibility scans** and **site-wide access
 
 ## Developer Tooling
 
-* Web accessibility dashboard
+* Accessibility dashboard
 * CLI accessibility scanner
 * GitHub Actions integration
 * CI threshold gating
@@ -104,7 +97,7 @@ A11yLab supports both **single-page accessibility scans** and **site-wide access
 
 * SSRF protection
 * Localhost blocking
-* Private-network blocking
+* Private-network protection
 * Internal-hostname protection
 * Controlled crawling
 * Configurable crawl depth
@@ -114,18 +107,16 @@ A11yLab supports both **single-page accessibility scans** and **site-wide access
 
 # Accessibility Standards
 
-A11yLab focuses on:
-
 ## WCAG 2.2
 
-Accessibility principles:
+A11yLab focuses on the four WCAG principles:
 
 * **Perceivable**
 * **Operable**
 * **Understandable**
 * **Robust**
 
-The scanner supports WCAG-related tags including:
+Supported accessibility tags include:
 
 ```text
 wcag2a
@@ -138,7 +129,7 @@ best-practice
 
 ## WAI-ARIA
 
-Accessibility analysis and component examples cover:
+Coverage includes:
 
 * Roles
 * States
@@ -160,201 +151,131 @@ Semantic HTML is preferred whenever native browser semantics provide the require
 
 # Architecture
 
-A11yLab follows a layered architecture separating the client interfaces, application APIs, accessibility engines, result-processing pipeline, crawling infrastructure, observability, and deployment environment.
+A11yLab uses a modular architecture separating the client layer, application APIs, accessibility engines, crawling, result processing, reporting, and infrastructure.
 
 ```mermaid
 flowchart TB
 
     subgraph CLIENT["Client Layer"]
-        Browser["Browser"]
+        Browser["Browser / Web UI"]
         CLI["CLI"]
         GHA["GitHub Actions"]
     end
 
     subgraph APP["Next.js Application"]
-        UI["Web UI"]
-
-        subgraph WEB["Web Pages"]
-            Home["Home Page"]
-            ScanResults["Scan Results"]
-            CrawlResults["Crawl Results"]
-        end
-
-        Middleware["HTTP Request Logging"]
-
-        subgraph API["API Routes"]
-            ScanAPI["POST /api/scan"]
-            CrawlAPI["POST /api/crawl"]
-            CIScanAPI["POST /api/ci/scan"]
-            CICrawlAPI["POST /api/ci/crawl"]
-            StatusAPI["GET /api/scan/[id]/status"]
-            ResultAPI["GET /api/scan/[id]"]
-            PDFAPI["GET /api/scan/[id]/pdf"]
-        end
+        API["REST API"]
+        Pages["Scan & Crawl UI"]
     end
 
-    subgraph SCANNER["Accessibility Scanner"]
+    subgraph ENGINE["Accessibility Engines"]
         Axe["axe-core"]
         IBM["IBM Equal Access"]
-        Custom["Custom Playwright Checks"]
+        Custom["Custom Playwright"]
     end
 
     subgraph CRAWLER["Site Crawler"]
         Crawlee["Crawlee / Playwright"]
-        Robots["robots.txt"]
-        Sitemap["Sitemap Discovery"]
+        Discovery["robots.txt / Sitemap / Links"]
     end
 
-    subgraph PIPELINE["Result Processing Pipeline"]
-        Normalizer["Normalizer"]
-        Deduplicator["Deduplicator"]
-        Mapper["WCAG Mapper"]
-        Scorer["WCAG Scorer"]
-        Formatters["Report Formatters"]
+    subgraph PIPELINE["Result Processing"]
+        Normalize["Normalize & Deduplicate"]
+        WCAG["WCAG Mapping & Scoring"]
+        Reports["JSON / SARIF / JUnit / HTML / PDF"]
     end
 
-    subgraph REPORTS["Report Formats"]
-        JSON["JSON"]
-        SARIF["SARIF"]
-        JUnit["JUnit XML"]
-        HTML["HTML"]
-        PDF["PDF"]
+    Store["Result Store"]
+
+    subgraph CLOUD["Infrastructure"]
+        Azure["Azure App Service"]
+        Insights["Application Insights"]
+        Security["GitHub Code Scanning"]
     end
 
-    Store["In-Memory Result Store"]
+    Browser --> Pages
+    CLI --> API
+    GHA --> API
 
-    subgraph OBS["Observability"]
-        Logger["Structured Logger"]
-        Telemetry["Telemetry"]
-        Instrumentation["Instrumentation"]
-    end
+    Pages --> API
 
-    subgraph AZURE["Azure"]
-        ACR["Azure Container Registry"]
-        AppService["Azure App Service"]
-        AppInsights["Application Insights"]
-    end
+    API --> Axe
+    API --> IBM
+    API --> Custom
+    API --> Crawlee
 
-    subgraph GITHUB["GitHub"]
-        Security["Code Scanning / Security Tab"]
-    end
-
-    Browser --> UI
-    CLI --> CIScanAPI
-    CLI --> CICrawlAPI
-    GHA --> CIScanAPI
-    GHA --> CICrawlAPI
-
-    UI --> Home
-    UI --> ScanResults
-    UI --> CrawlResults
-
-    Browser --> Middleware
-    Middleware --> ScanAPI
-    Middleware --> CrawlAPI
-
-    ScanAPI --> Axe
-    ScanAPI --> IBM
-    ScanAPI --> Custom
-
-    CrawlAPI --> Crawlee
-    Crawlee --> Robots
-    Crawlee --> Sitemap
-
+    Crawlee --> Discovery
     Crawlee --> Axe
     Crawlee --> IBM
     Crawlee --> Custom
 
-    Axe --> Normalizer
-    IBM --> Normalizer
-    Custom --> Normalizer
+    Axe --> Normalize
+    IBM --> Normalize
+    Custom --> Normalize
 
-    Normalizer --> Deduplicator
-    Deduplicator --> Mapper
-    Mapper --> Scorer
-    Scorer --> Formatters
+    Normalize --> WCAG
+    WCAG --> Reports
+    Reports --> Store
+    Reports --> Security
 
-    Formatters --> JSON
-    Formatters --> SARIF
-    Formatters --> JUnit
-    Formatters --> HTML
-    Formatters --> PDF
-
-    Formatters --> Store
-
-    StatusAPI --> Store
-    ResultAPI --> Store
-    PDFAPI --> Store
-
-    Logger --> Instrumentation
-    Telemetry --> Instrumentation
-    Instrumentation --> AppInsights
-
-    AppService --> ACR
-    SARIF --> Security
+    Azure --> Insights
 ```
 
-### Architecture Flow
+### Core Flow
 
 ```text
-Browser
-   │
-   ├── Web UI
-   │
-   └── Scan / Crawl APIs
-             │
-             ▼
-      Accessibility Engines
-       ┌──────┼──────┐
-       │      │      │
-      axe    IBM   Custom
-       │      │      │
-       └──────┼──────┘
-              ▼
-         Normalizer
-              │
-              ▼
-         Deduplicator
-              │
-              ▼
-          WCAG Mapper
-              │
-              ▼
-          WCAG Scorer
-              │
-              ▼
-        Report Formatters
-       ┌──────┼──────┬──────┐
-       │      │      │      │
-      JSON  SARIF  JUnit  PDF/HTML
-              │
-              ▼
-        Result Store
+Client
+  │
+  ▼
+Next.js API
+  │
+  ├── Single Scan ──┐
+  │                 │
+  └── Site Crawl ──┤
+                    ▼
+          Accessibility Engines
+             ┌──────┼──────┐
+             │      │      │
+            axe    IBM   Custom
+             └──────┼──────┘
+                    ▼
+          Normalize & Deduplicate
+                    │
+                    ▼
+             WCAG Mapping
+                    │
+                    ▼
+             Scoring Engine
+                    │
+                    ▼
+                 Reports
+                    │
+                    ▼
+              Result Store
 ```
 
-For site-wide scans:
+### Site-Wide Flow
 
 ```text
 Crawl API
-    │
-    ▼
+   │
+   ▼
 Crawlee
-    │
-    ├── robots.txt
-    ├── Sitemap
-    └── Link Discovery
-            │
-            ▼
-      Page-by-Page Scan
-            │
-            ▼
-   Accessibility Engines
-            │
-            ▼
-     Result Pipeline
-            │
-            ▼
-      Site-Wide Report
+   │
+   ├── robots.txt
+   ├── Sitemap
+   └── Link Discovery
+          │
+          ▼
+   Page-by-Page Scan
+          │
+          ▼
+ Accessibility Engines
+          │
+          ▼
+  Result Processing
+          │
+          ▼
+   Site-Wide Report
 ```
 
 ---
@@ -365,15 +286,13 @@ A11yLab uses multiple complementary accessibility engines.
 
 ## axe-core
 
-The primary automated accessibility engine.
-
-Used through:
+The primary automated accessibility engine, integrated through:
 
 ```text
 @axe-core/playwright
 ```
 
-It evaluates web pages against WCAG accessibility rules and provides structured violations containing information such as:
+Findings include:
 
 * Rule ID
 * Impact
@@ -383,36 +302,24 @@ It evaluates web pages against WCAG accessibility rules and provides structured 
 * Affected HTML nodes
 * Remediation guidance
 
----
-
 ## IBM Equal Access
 
-IBM Equal Access is used as a complementary accessibility engine.
-
-Results from multiple engines are normalized before being presented to the user.
-
-This helps reduce duplicate findings and provides broader accessibility coverage.
-
----
+Used as a complementary accessibility engine. Results are normalized with other scanner outputs to improve coverage and reduce duplicate findings.
 
 ## Custom Playwright Checks
 
-Custom browser-based checks supplement automated engines for cases requiring application-specific logic.
-
-Examples include:
+Browser-based checks cover application-specific accessibility behavior, including:
 
 * Ambiguous link text
-* `aria-current` navigation behavior
-* Semantic emphasis
-* Accessible pricing information
-* Focusable elements hidden behind sticky UI
-* Application-specific accessibility patterns
+* `aria-current` behavior
+* Semantic patterns
+* Accessible content
+* Focusable elements obscured by sticky UI
+* Application-specific accessibility rules
 
 ---
 
 # Result Processing Pipeline
-
-Raw scanner results are processed through a normalized pipeline:
 
 ```text
 axe-core
@@ -440,13 +347,13 @@ Scoring Engine
 Report Generator
 ```
 
-This allows results from different engines to be represented consistently.
+This provides a consistent representation of findings from multiple accessibility engines.
 
 ---
 
 # WCAG Scoring
 
-Accessibility findings are prioritized according to impact.
+Findings are prioritized according to impact.
 
 | Impact   | Weight |
 | -------- | -----: |
@@ -460,8 +367,6 @@ Overall score:
 ```text
 (weighted passes / weighted total) × 100
 ```
-
-Grades:
 
 | Score | Grade |
 | ----: | :---: |
@@ -477,14 +382,9 @@ Site-wide scans aggregate results across individual pages.
 
 # Accessibility Findings
 
-Every finding is represented as an actionable engineering issue.
-
-Example:
+Each finding is represented as an actionable engineering issue.
 
 ```text
-Finding
---------------------------------------------------
-
 Issue:
 Button does not have an accessible name.
 
@@ -516,8 +416,6 @@ axe-core
 
 # Remediation Workflow
 
-A11yLab follows:
-
 ```text
 Detect
   ↓
@@ -541,10 +439,6 @@ Prevent Regression
   <SettingsIcon />
 </button>
 ```
-
-### Problem
-
-The icon-only button does not provide a meaningful accessible name.
 
 ### After
 
@@ -600,13 +494,11 @@ Testing includes:
 
 # Screen Reader Testing
 
-Automated tools cannot fully determine whether a user experience works correctly with assistive technology.
+Automated tools cannot fully determine whether an experience works correctly with assistive technology.
 
-A11yLab therefore includes manual screen-reader testing workflows.
+A11yLab includes manual screen-reader testing workflows.
 
 ## VoiceOver
-
-Target environment:
 
 ```text
 macOS
@@ -616,7 +508,7 @@ VoiceOver
 
 Test areas:
 
-* Page navigation
+* Navigation
 * Headings
 * Landmarks
 * Links
@@ -628,8 +520,6 @@ Test areas:
 * Focus changes
 
 ## NVDA
-
-Target environment:
 
 ```text
 Windows
@@ -650,8 +540,6 @@ Test areas:
 * Keyboard interaction
 
 ## JAWS
-
-Target environment:
 
 ```text
 Windows
@@ -707,9 +595,7 @@ Example:
 
 # Accessible Components
 
-The project provides reusable accessibility-focused component patterns.
-
-Examples include:
+Accessibility-focused component patterns include:
 
 ```text
 AccessibleButton
@@ -725,7 +611,7 @@ AccessibleMenu
 AccessiblePagination
 ```
 
-Each component should consider:
+Components should consider:
 
 * Semantic HTML
 * Accessible naming
@@ -739,27 +625,27 @@ Each component should consider:
 
 # Accessibility Testing Strategy
 
-A11yLab intentionally combines automated and manual testing.
+A11yLab combines automated and manual accessibility testing.
 
 ```text
-                 Accessibility Testing
-                         │
-          ┌──────────────┴──────────────┐
-          │                             │
-     Automated                      Manual
-          │                             │
-    ┌─────┼─────┐                ┌─────┼─────┐
-    │     │     │                │     │     │
-   axe   IBM  Custom          Keyboard  SR  Visual
-    │     │     │                │     │     │
-    └─────┼─────┘                └─────┼─────┘
-          │                             │
-          └──────────────┬──────────────┘
-                         ▼
-                  Remediation
-                         │
-                         ▼
-                  Regression Tests
+              Accessibility Testing
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+      Automated                   Manual
+          │                         │
+    ┌─────┼─────┐             ┌────┼────┐
+    │     │     │             │    │    │
+   axe   IBM  Custom       Keyboard  SR  Visual
+    │     │     │             │    │    │
+    └─────┼─────┘             └────┼────┘
+          │                         │
+          └────────────┬────────────┘
+                       ▼
+                 Remediation
+                       │
+                       ▼
+                Regression Tests
 ```
 
 ---
@@ -792,13 +678,11 @@ test("homepage accessibility", async ({ page }) => {
 
 # CLI
 
-After building the project:
+Build the project:
 
 ```bash
 npm run build
 ```
-
-the accessibility scanner can be used through the CLI.
 
 ## Single-Page Scan
 
@@ -852,9 +736,7 @@ Example:
 
 # GitHub Actions
 
-A11yLab can integrate accessibility checks directly into CI/CD.
-
-Example:
+Accessibility checks can run directly in CI/CD.
 
 ```yaml
 name: Accessibility Tests
@@ -895,8 +777,6 @@ jobs:
 
 # CI Quality Gates
 
-Accessibility checks should run as part of the development lifecycle.
-
 ```text
 Code Change
      ↓
@@ -917,18 +797,18 @@ Review
 Merge
 ```
 
-The CI pipeline can enforce thresholds based on:
+CI gates can enforce:
 
-* Overall accessibility score
+* Accessibility score
 * Violation count
-* Severity
-* Specific accessibility rule IDs
+* Severity thresholds
+* Specific rule IDs
 
 ---
 
 # SARIF Integration
 
-Accessibility results can be exported as SARIF and integrated with GitHub's code-scanning workflow.
+Accessibility results can be exported as SARIF and integrated with GitHub Code Scanning.
 
 ```text
 Application
@@ -939,18 +819,18 @@ SARIF
     ↓
 GitHub Actions
     ↓
-Security / Code Scanning
+Code Scanning
     ↓
 Accessibility Findings
 ```
 
-This makes accessibility violations visible as part of the engineering feedback loop.
+This brings accessibility feedback directly into the engineering workflow.
 
 ---
 
 # Reports
 
-Supported report formats include:
+Supported formats:
 
 ```text
 JSON
@@ -976,9 +856,7 @@ Reports can contain:
 
 # Site-Wide Crawling
 
-A11yLab supports full-site accessibility evaluation.
-
-The crawler provides:
+The crawler supports:
 
 * Breadth-first traversal
 * Configurable maximum pages
@@ -988,8 +866,6 @@ The crawler provides:
 * Sitemap discovery
 * Per-page accessibility results
 * Aggregated site score
-
-Example:
 
 ```text
 Website
@@ -1002,13 +878,13 @@ Website
   └── Contact
         │
         ▼
-Accessibility Scan
+ Accessibility Scan
         │
         ▼
-Per-page Findings
+ Per-page Findings
         │
         ▼
-Site-wide Report
+ Site-wide Report
 ```
 
 ---
@@ -1034,9 +910,7 @@ External scanning should never provide unrestricted access to internal infrastru
 
 # Observability
 
-The platform supports structured application logging and telemetry.
-
-Key metrics include:
+The platform supports structured logging and telemetry.
 
 | Metric                | Type      |
 | --------------------- | --------- |
@@ -1087,10 +961,8 @@ a11ylab/
 │   │   │   ├── scan/
 │   │   │   ├── crawl/
 │   │   │   └── ci/
-│   │   │
 │   │   ├── scan/
 │   │   │   └── [id]/
-│   │   │
 │   │   └── crawl/
 │   │       └── [id]/
 │   │
@@ -1104,12 +976,10 @@ a11ylab/
 │   └── lib/
 │       ├── logger.ts
 │       ├── telemetry.ts
-│       │
 │       ├── scanner/
 │       │   ├── axe/
 │       │   ├── ibm/
 │       │   └── custom/
-│       │
 │       ├── crawler/
 │       ├── scoring/
 │       ├── report/
@@ -1126,11 +996,8 @@ a11ylab/
 │   └── reports/
 │
 ├── remediation-guides/
-│
 ├── reports/
-│
 ├── action/
-│
 ├── infra/
 │
 ├── .github/
@@ -1151,48 +1018,17 @@ a11ylab/
 
 # Accessibility Audit Methodology
 
-A11yLab uses the following evaluation process:
+A11yLab follows a structured accessibility engineering process:
 
-### 1. Automated Analysis
-
-Run accessibility engines against the target application.
-
-### 2. Finding Normalization
-
-Normalize findings from multiple scanning engines.
-
-### 3. Deduplication
-
-Remove duplicate violations reported by multiple engines.
-
-### 4. WCAG Mapping
-
-Map findings to relevant WCAG success criteria.
-
-### 5. Impact Assessment
-
-Prioritize findings according to their effect on users.
-
-### 6. Manual Verification
-
-Validate findings using:
-
-* Keyboard navigation
-* Browser inspection
-* Screen readers
-* Visual inspection
-
-### 7. Remediation
-
-Implement the appropriate code-level fix.
-
-### 8. Verification
-
-Re-run automated and manual tests.
-
-### 9. Regression Prevention
-
-Add automated tests where possible so the issue does not return.
+1. **Automated Analysis** — Run accessibility engines against the target application.
+2. **Normalization** — Normalize findings from multiple engines.
+3. **Deduplication** — Remove duplicate violations.
+4. **WCAG Mapping** — Map findings to relevant success criteria.
+5. **Impact Assessment** — Prioritize issues by user impact.
+6. **Manual Verification** — Validate using keyboard, browser inspection, screen readers, and visual inspection.
+7. **Remediation** — Implement the appropriate code-level fix.
+8. **Verification** — Re-run automated and manual tests.
+9. **Regression Prevention** — Add tests to prevent recurrence.
 
 ---
 
@@ -1223,8 +1059,6 @@ Regression Protected
 ---
 
 # Developer Accessibility Checklist
-
-Before merging a UI change:
 
 ## Semantic Structure
 
@@ -1306,15 +1140,11 @@ Optional:
 * macOS for VoiceOver testing
 * Windows for NVDA / JAWS testing
 
----
-
 ## Installation
 
 ```bash
 git clone https://github.com/<your-username>/a11ylab.git
-
 cd a11ylab
-
 npm install
 ```
 
@@ -1323,8 +1153,6 @@ Install Playwright browsers:
 ```bash
 npx playwright install --with-deps chromium
 ```
-
----
 
 ## Development Server
 
@@ -1338,15 +1166,11 @@ Open:
 http://localhost:3000
 ```
 
----
-
 ## Unit Tests
 
 ```bash
 npm test
 ```
-
----
 
 ## Test Coverage
 
@@ -1354,23 +1178,17 @@ npm test
 npm run test:coverage
 ```
 
----
-
 ## Accessibility Tests
 
 ```bash
 npm run test:a11y
 ```
 
----
-
 ## Lint
 
 ```bash
 npm run lint
 ```
-
----
 
 ## Production Build
 
@@ -1542,5 +1360,6 @@ Prevent regressions
 
 **Build for everyone. Test for everyone.**
 
-```
-```
+
+
+
