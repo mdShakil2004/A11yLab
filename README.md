@@ -1,235 +1,640 @@
+````markdown
 ---
-title: Accessibility Scan Demo App
-description: Multi-engine WCAG 2.2 Level AA accessibility scanner with web UI, CLI, GitHub Action, and Azure observability
-ms.date: 2026-03-08
+title: A11yLab
+description: Production-style web accessibility engineering platform for WCAG 2.2 Level AA auditing, remediation, automated testing, and CI/CD validation.
+---
+
+# A11yLab
+
+**Web Accessibility Engineering • WCAG 2.2 • WAI-ARIA • Automated Testing • Remediation**
+
+A11yLab is a full-stack web accessibility engineering platform designed to evaluate, diagnose, remediate, and continuously validate accessibility across modern web applications.
+
+The project combines automated accessibility scanning with manual testing workflows, WCAG 2.2 Level AA mapping, WAI-ARIA analysis, keyboard accessibility, screen-reader validation, actionable remediation guidance, and CI/CD regression testing.
+
+The objective is to treat accessibility as an engineering requirement throughout the software development lifecycle rather than as a final compliance check.
+
 ---
 
 ## Overview
 
-A full-stack accessibility scanning platform that tests websites against WCAG 2.2 Level AA criteria using
-three complementary engines: axe-core, IBM Equal Access, and custom Playwright-based checks. Results are
-normalized, deduplicated, and scored to produce actionable reports in multiple formats.
+A11yLab provides an end-to-end accessibility workflow:
 
-Built with Next.js 15, React 19, and TypeScript. Supports single-page scans, full-site crawls with
-configurable depth and concurrency, and CI/CD integration through a CLI, GitHub Action, and scheduled
-SARIF-based security scanning.
+```text
+Web Application
+      │
+      ▼
+Accessibility Scan
+      │
+      ├── axe-core
+      ├── IBM Equal Access
+      └── Custom Playwright Checks
+      │
+      ▼
+Result Normalization
+      │
+      ▼
+Deduplication
+      │
+      ▼
+WCAG Classification
+      │
+      ▼
+Severity & Impact Analysis
+      │
+      ▼
+Accessibility Report
+      │
+      ▼
+Remediation
+      │
+      ▼
+Keyboard + Screen Reader Testing
+      │
+      ▼
+Automated Regression Testing
+      │
+      ▼
+CI/CD Validation
+````
 
-## Features
+A11yLab supports both **single-page accessibility scans** and **site-wide accessibility evaluation** with configurable crawling, depth, and concurrency.
 
-* **Multi-engine scanning** with axe-core, IBM Equal Access, and custom checks running together
-  with cross-engine deduplication and severity-based prioritization.
-* **Single-page scan** via the web UI or API to scan one page.
-* **Site-wide crawl** with BFS traversal, robots.txt compliance, sitemap discovery, configurable
-  max pages (1-200), depth (1-10), and concurrency (1-5).
-* **WCAG scoring** weighted by impact (critical, serious, moderate, minor) mapped to
-  WCAG principles (Perceivable, Operable, Understandable, Robust) with A-F grading.
-* **AODA compliance** reporting (WCAG 2.0 AA as a subset of WCAG 2.2 AA).
-* **Multiple output formats** including JSON, SARIF 2.1.0, JUnit XML, PDF, and HTML reports.
-* **CLI tool** with `a11y-scan scan` and `a11y-scan crawl` commands including threshold gating.
-* **GitHub Action** for CI pipelines with score/pass outputs and SARIF upload support.
-* **Scheduled accessibility scanning** via GitHub Actions with SARIF results published to the
-  GitHub Security tab.
-* **CI threshold gating** to fail builds on score, violation count per severity, or specific rule IDs.
-* **Structured logging** with configurable log levels, writing to both stdout and OpenTelemetry.
-* **Azure Application Insights** integration with custom metrics, traces, live metrics, and
-  100% sampling for full telemetry visibility.
-* **HTTP request logging** via Next.js middleware for all API and page routes.
-* **SSRF prevention** blocking scans of localhost, private IPs, and internal hostnames.
-* **Self-testing** where the app scans itself in CI using Playwright e2e tests.
+---
 
-## Tech Stack
+# Key Capabilities
 
-| Category | Technology |
-| --- | --- |
-| Framework | Next.js 15.5 (standalone output, Turbopack) |
-| Language | TypeScript 5, React 19 |
-| Styling | Tailwind CSS 4 |
-| Scan engines | axe-core 4.11, IBM Equal Access 4.0, custom Playwright checks |
-| Crawling | Crawlee 3.16 (Playwright-based) |
-| PDF generation | Puppeteer 24 |
-| Observability | Azure Monitor OpenTelemetry 1.16, OpenTelemetry API 1.9, OTel Logs API 0.57 |
-| Unit tests | Vitest 4 with coverage-v8 |
-| E2E tests | Playwright 1.58 with @axe-core/playwright |
-| CLI | Commander 14 |
-| Container | Docker (multi-stage, node:20-bookworm-slim) |
-| Infrastructure | Azure Bicep (ACR + App Service) |
-| CI/CD | GitHub Actions |
+## Accessibility Evaluation
 
-## Quick Start
+* Single-page accessibility scanning
+* Site-wide accessibility crawling
+* WCAG 2.2 Level AA evaluation
+* Accessibility issue detection
+* Severity-based prioritization
+* WCAG success-criteria mapping
+* Accessibility score and grading
+* Actionable remediation recommendations
 
-### Prerequisites
+## Testing
 
-* Node.js 20+
-* npm 10+
-* Docker (optional, for container mode)
+* Automated accessibility testing
+* Playwright browser testing
+* axe-core analysis
+* IBM Equal Access analysis
+* Custom accessibility checks
+* Keyboard-only testing
+* Focus-management testing
+* Screen-reader testing
+* Accessibility regression testing
 
-### Install dependencies
+## Developer Tooling
 
-```bash
-npm install
-npx playwright install --with-deps chromium
+* Web accessibility dashboard
+* CLI accessibility scanner
+* GitHub Actions integration
+* CI threshold gating
+* SARIF output
+* JSON reports
+* JUnit reports
+* HTML reports
+* PDF reports
+
+## Security
+
+* SSRF protection
+* Localhost blocking
+* Private-network blocking
+* Internal-hostname protection
+* Controlled crawling
+* Configurable crawl depth
+* Configurable concurrency
+
+---
+
+# Accessibility Standards
+
+A11yLab focuses on:
+
+## WCAG 2.2
+
+Accessibility principles:
+
+* **Perceivable**
+* **Operable**
+* **Understandable**
+* **Robust**
+
+The scanner supports WCAG-related tags including:
+
+```text
+wcag2a
+wcag2aa
+wcag21a
+wcag21aa
+wcag22aa
+best-practice
 ```
 
-### Run locally
+## WAI-ARIA
 
-```powershell
-# Fast dev mode (default) — uses Next.js dev server with Turbopack
-.\start-local.ps1
+Accessibility analysis and component examples cover:
 
-# Docker mode — builds container, closer to production
-.\start-local.ps1 -Mode docker
+* Roles
+* States
+* Properties
+* Accessible names
+* Descriptions
+* Live regions
+* Dialogs
+* Tabs
+* Accordions
+* Navigation
+* Menus
+* Forms
+* Custom interactive controls
+
+Semantic HTML is preferred whenever native browser semantics provide the required behavior.
+
+---
+
+# Scanning Architecture
+
+A11yLab uses multiple complementary accessibility engines.
+
+## axe-core
+
+The primary automated accessibility engine.
+
+Used through:
+
+```text
+@axe-core/playwright
 ```
 
-The app starts at `http://localhost:3000`.
+It evaluates web pages against WCAG accessibility rules and provides structured violations containing information such as:
 
-### Stop
+* Rule ID
+* Impact
+* Description
+* Help text
+* WCAG tags
+* Affected HTML nodes
+* Remediation guidance
 
-```powershell
-# Stop dev server
-.\stop-local.ps1
+---
 
-# Stop Docker container
-.\stop-local.ps1 -Mode docker
+## IBM Equal Access
+
+IBM Equal Access is used as a complementary accessibility engine.
+
+Results from multiple engines are normalized before being presented to the user.
+
+This helps reduce duplicate findings and provides broader accessibility coverage.
+
+---
+
+## Custom Playwright Checks
+
+Custom browser-based checks supplement automated engines for cases requiring application-specific logic.
+
+Examples include:
+
+* Ambiguous link text
+* `aria-current` navigation behavior
+* Semantic emphasis
+* Accessible pricing information
+* Focusable elements hidden behind sticky UI
+* Application-specific accessibility patterns
+
+---
+
+# Result Processing Pipeline
+
+Raw scanner results are processed through a normalized pipeline:
+
+```text
+axe-core
+    │
+IBM Equal Access
+    │
+Custom Checks
+    │
+    ▼
+Normalizer
+    │
+    ▼
+Deduplicator
+    │
+    ▼
+WCAG Mapper
+    │
+    ▼
+Severity Classifier
+    │
+    ▼
+Scoring Engine
+    │
+    ▼
+Report Generator
 ```
 
-## Scanning Engines
+This allows results from different engines to be represented consistently.
 
-### axe-core
+---
 
-The primary engine. Runs axe-core directly on the page via `@axe-core/playwright` with the original
-`axe.min.js` read from disk (not the webpack-bundled version) wrapped in a closure to prevent
-CommonJS `module` reference errors on sites with AMD loaders.
+# WCAG Scoring
 
-Tags tested: `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`, `best-practice`.
+Accessibility findings are prioritized according to impact.
 
-### IBM Equal Access
+| Impact   | Weight |
+| -------- | -----: |
+| Critical |     10 |
+| Serious  |      7 |
+| Moderate |      3 |
+| Minor    |      1 |
 
-Runs IBM's accessibility-checker ACE engine in an **isolated Playwright page** to prevent its
-`eval()`-based script injection from corrupting the main page's JavaScript context. If the IBM
-scan fails, results gracefully degrade to axe-core only.
+Overall score:
 
-### Custom Checks
-
-Playwright-based checks that catch issues the other engines miss:
-
-* **ambiguous-link-text** — detects generic link text ("Learn More", "Click Here", etc.)
-* **aria-current-page** — verifies navigation links to the current page have `aria-current="page"`
-* **emphasis-strong-semantics** — flags `<b>` and `<i>` tags that should be `<strong>` and `<em>`
-* **discount-price-accessibility** — ensures strikethrough pricing provides screen reader context
-* **sticky-element-overlap** — detects focusable elements obscured by fixed/sticky positioned elements
-
-## Architecture
-
-```mermaid
-graph TB
-    subgraph "Client Layer"
-        Browser["Browser"]
-        CLI["CLI Tool<br/>a11y-scan"]
-        GHA["GitHub Actions<br/>Scheduled Scan"]
-    end
-
-    subgraph "Next.js Application"
-        subgraph "Web UI"
-            Home["Home Page<br/>ScanForm"]
-            ScanPage["Scan Results<br/>/scan/[id]"]
-            CrawlPage["Crawl Results<br/>/crawl/[id]"]
-        end
-
-        Middleware["HTTP Middleware<br/>Request Logging"]
-
-        subgraph "API Routes"
-            ScanAPI["POST /api/scan<br/>Single-page scan"]
-            CrawlAPI["POST /api/crawl<br/>Site-wide crawl"]
-            CiScanAPI["POST /api/ci/scan<br/>CI threshold check"]
-            CiCrawlAPI["POST /api/ci/crawl<br/>CI crawl check"]
-            StatusAPI["GET /api/scan/[id]/status<br/>SSE progress stream"]
-            ResultAPI["GET /api/scan/[id]<br/>Scan results"]
-            PdfAPI["GET /api/scan/[id]/pdf<br/>PDF report"]
-        end
-
-        subgraph "Scanner Engine"
-            AxeCore["axe-core<br/>Primary engine"]
-            IBM["IBM Equal Access<br/>Isolated page"]
-            Custom["Custom Checks<br/>Playwright-based"]
-        end
-
-        subgraph "Result Pipeline"
-            Normalizer["Normalizer"]
-            Dedup["Deduplicator"]
-            Scorer["WCAG Scorer"]
-            Formatters["Formatters<br/>JSON / SARIF / JUnit / PDF"]
-        end
-
-        subgraph "Site Crawler"
-            Crawlee["Crawlee<br/>PlaywrightCrawler"]
-            Robots["robots.txt"]
-            Sitemap["Sitemap Discovery"]
-        end
-
-        subgraph "Observability"
-            Logger["Structured Logger<br/>stdout + OTel Logs"]
-            Telemetry["Telemetry Module<br/>Spans + Metrics"]
-            Instrumentation["Instrumentation<br/>Azure Monitor SDK"]
-        end
-
-        Store["In-Memory Store<br/>Scan/Crawl Records"]
-    end
-
-    subgraph "Azure Cloud"
-        AppService["Azure App Service<br/>Docker Container"]
-        ACR["Azure Container Registry"]
-        AppInsights["Application Insights<br/>Traces / Metrics / Live"]
-    end
-
-    subgraph "GitHub"
-        SecurityTab["Security Tab<br/>Code Scanning Alerts"]
-    end
-
-    Browser --> Middleware --> ScanAPI & CrawlAPI
-    Browser --> Home & ScanPage & CrawlPage
-    CLI --> CiScanAPI & CiCrawlAPI
-    GHA -->|"POST /api/ci/scan<br/>format=sarif"| CiScanAPI
-    GHA -->|"Upload SARIF"| SecurityTab
-
-    ScanAPI --> AxeCore & IBM & Custom
-    CrawlAPI --> Crawlee
-    Crawlee --> Robots & Sitemap
-    Crawlee --> AxeCore & IBM & Custom
-
-    AxeCore & IBM & Custom --> Normalizer --> Dedup --> Scorer --> Formatters
-    Formatters --> Store
-    StatusAPI & ResultAPI & PdfAPI --> Store
-
-    Logger --> Instrumentation
-    Telemetry --> Instrumentation
-    Instrumentation --> AppInsights
-
-    AppService --> ACR
+```text
+(weighted passes / weighted total) × 100
 ```
 
-## CLI
+Grades:
 
-The CLI is available as `a11y-scan` after building:
+| Score | Grade |
+| ----: | :---: |
+|   90+ |   A   |
+| 70–89 |   B   |
+| 50–69 |   C   |
+| 30–49 |   D   |
+|   <30 |   F   |
+
+Site-wide scans aggregate results across individual pages.
+
+---
+
+# Accessibility Findings
+
+Every finding is represented as an actionable engineering issue.
+
+Example:
+
+```text
+Finding
+--------------------------------------------------
+
+Issue:
+Button does not have an accessible name.
+
+Impact:
+Serious
+
+WCAG:
+4.1.2 Name, Role, Value
+
+Affected Element:
+<button>
+
+Problem:
+Screen-reader users cannot determine the purpose
+of the interactive control.
+
+Recommended Fix:
+Provide a meaningful accessible name using
+visible text or an appropriate naming mechanism.
+
+Verification:
+Keyboard
+VoiceOver
+NVDA
+axe-core
+```
+
+---
+
+# Remediation Workflow
+
+A11yLab follows:
+
+```text
+Detect
+  ↓
+Understand
+  ↓
+Classify
+  ↓
+Fix
+  ↓
+Verify
+  ↓
+Prevent Regression
+```
+
+## Example
+
+### Before
+
+```tsx
+<button>
+  <SettingsIcon />
+</button>
+```
+
+### Problem
+
+The icon-only button does not provide a meaningful accessible name.
+
+### After
+
+```tsx
+<button
+  type="button"
+  aria-label="Open settings"
+>
+  <SettingsIcon aria-hidden="true" />
+</button>
+```
+
+### Verification
+
+```text
+✓ Keyboard interaction
+✓ Visible focus
+✓ VoiceOver
+✓ NVDA
+✓ Automated accessibility test
+```
+
+---
+
+# Keyboard Accessibility
+
+A11yLab validates keyboard interaction independently from automated scanning.
+
+Supported interactions include:
+
+```text
+Tab
+Shift + Tab
+Enter
+Space
+Escape
+Arrow Keys
+```
+
+Testing includes:
+
+* Logical focus order
+* Visible focus indicators
+* Keyboard-operable controls
+* Skip links
+* Modal focus management
+* Focus trapping
+* Focus restoration
+* Keyboard traps
+* Custom component interaction
+
+---
+
+# Screen Reader Testing
+
+Automated tools cannot fully determine whether a user experience works correctly with assistive technology.
+
+A11yLab therefore includes manual screen-reader testing workflows.
+
+## VoiceOver
+
+Target environment:
+
+```text
+macOS
+Safari
+VoiceOver
+```
+
+Test areas:
+
+* Page navigation
+* Headings
+* Landmarks
+* Links
+* Buttons
+* Forms
+* Dialogs
+* Dynamic content
+* Error messages
+* Focus changes
+
+---
+
+## NVDA
+
+Target environment:
+
+```text
+Windows
+Chrome / Firefox
+NVDA
+```
+
+Test areas:
+
+* Heading navigation
+* Landmark navigation
+* Form controls
+* Buttons
+* Links
+* Dialogs
+* Status messages
+* Dynamic content
+* Keyboard interaction
+
+---
+
+## JAWS
+
+Target environment:
+
+```text
+Windows
+Supported browser
+JAWS
+```
+
+Test areas:
+
+* Forms
+* Navigation
+* Interactive controls
+* Dialogs
+* Accessible names
+* Dynamic content
+
+---
+
+# Accessible Forms
+
+A11yLab provides accessible form patterns covering:
+
+* Form labels
+* Instructions
+* Required fields
+* Descriptions
+* Validation
+* Error messages
+* Error announcements
+* Focus management
+
+Example:
+
+```html
+<label for="email">
+  Email address
+</label>
+
+<input
+  id="email"
+  name="email"
+  type="email"
+  aria-describedby="email-help"
+  autocomplete="email"
+/>
+
+<p id="email-help">
+  Enter the email address associated with your account.
+</p>
+```
+
+---
+
+# Accessible Components
+
+The project provides reusable accessibility-focused component patterns.
+
+Examples include:
+
+```text
+AccessibleButton
+AccessibleDialog
+AccessibleForm
+AccessibleInput
+AccessibleNavigation
+AccessibleTabs
+AccessibleAccordion
+AccessibleAlert
+AccessibleTooltip
+AccessibleMenu
+AccessiblePagination
+```
+
+Each component should consider:
+
+* Semantic HTML
+* Accessible naming
+* Keyboard interaction
+* Focus management
+* ARIA semantics
+* Screen-reader behavior
+* Automated testing
+
+---
+
+# Accessibility Testing Strategy
+
+A11yLab intentionally combines automated and manual testing.
+
+```text
+                 Accessibility Testing
+                         │
+          ┌──────────────┴──────────────┐
+          │                             │
+     Automated                      Manual
+          │                             │
+    ┌─────┼─────┐                ┌─────┼─────┐
+    │     │     │                │     │     │
+   axe  IBM  Custom          Keyboard  SR  Visual
+    │     │     │                │     │     │
+    └─────┼─────┘                └─────┼─────┘
+          │                             │
+          └──────────────┬──────────────┘
+                         ▼
+                  Remediation
+                         │
+                         ▼
+                  Regression Tests
+```
+
+---
+
+# Automated Accessibility Tests
+
+Example Playwright test:
+
+```typescript
+import { test, expect } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+
+test("homepage accessibility", async ({ page }) => {
+  await page.goto("/");
+
+  const results = await new AxeBuilder({ page })
+    .withTags([
+      "wcag2a",
+      "wcag2aa",
+      "wcag21aa",
+      "wcag22aa"
+    ])
+    .analyze();
+
+  expect(results.violations).toEqual([]);
+});
+```
+
+---
+
+# CLI
+
+After building the project:
 
 ```bash
 npm run build
 ```
 
-### Single-page scan
+the accessibility scanner can be used through the CLI.
+
+## Single-page scan
 
 ```bash
-a11y-scan scan --url https://example.com --threshold 80 --format sarif --output results/
+a11y-scan scan \
+  --url https://example.com \
+  --threshold 80 \
+  --format sarif \
+  --output results/
 ```
 
-### Site-wide crawl
+## Site-wide crawl
 
 ```bash
-a11y-scan crawl --url https://example.com --max-pages 100 --max-depth 3 --concurrency 3 --threshold 70 --format json
+a11y-scan crawl \
+  --url https://example.com \
+  --max-pages 100 \
+  --max-depth 3 \
+  --concurrency 3 \
+  --threshold 70 \
+  --format json
 ```
 
-### Configuration file
+---
 
-Create `.a11yrc.json` in the project root:
+# Configuration
+
+Create:
+
+```text
+.a11yrc.json
+```
+
+Example:
 
 ```json
 {
@@ -245,329 +650,702 @@ Create `.a11yrc.json` in the project root:
 }
 ```
 
-## GitHub Action
+---
 
-Use the built-in action in your workflow:
+# GitHub Actions
+
+A11yLab can integrate accessibility checks directly into CI/CD.
+
+Example:
 
 ```yaml
-- uses: devopsabcs-engineering/accessibility-scan-demo-app@main
-  with:
-    url: https://example.com
-    mode: single          # or "crawl"
-    threshold: 70
-    max-pages: 50         # crawl mode only
-    output-format: sarif  # json, sarif, or junit
-    output-directory: ./a11y-results
+name: Accessibility Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  accessibility:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run accessibility tests
+        run: npm run test:a11y
 ```
 
-**Outputs:** `score` (0–100), `passed` (true/false), `report-path`.
+---
 
-## Testing
+# CI Quality Gates
 
-### Unit tests
+Accessibility checks should run as part of the development lifecycle.
+
+```text
+Code Change
+     ↓
+Pull Request
+     ↓
+Lint
+     ↓
+Unit Tests
+     ↓
+Accessibility Tests
+     ↓
+Playwright Tests
+     ↓
+Build
+     ↓
+Review
+     ↓
+Merge
+```
+
+The CI pipeline can enforce thresholds based on:
+
+* Overall accessibility score
+* Violation count
+* Severity
+* Specific accessibility rule IDs
+
+---
+
+# SARIF Integration
+
+Accessibility results can be exported as SARIF and integrated with GitHub's code-scanning workflow.
+
+Example:
+
+```text
+Application
+    ↓
+Accessibility Scan
+    ↓
+SARIF
+    ↓
+GitHub Actions
+    ↓
+Security / Code Scanning
+    ↓
+Accessibility Findings
+```
+
+This makes accessibility violations visible as part of the engineering feedback loop.
+
+---
+
+# Reports
+
+Supported report formats include:
+
+```text
+JSON
+SARIF 2.1.0
+JUnit XML
+HTML
+PDF
+```
+
+Reports can contain:
+
+* Overall score
+* Accessibility grade
+* Violation counts
+* Severity
+* WCAG references
+* Rule descriptions
+* Affected elements
+* Remediation guidance
+* Verification status
+
+---
+
+# Site-Wide Crawling
+
+A11yLab supports full-site accessibility evaluation.
+
+The crawler provides:
+
+* Breadth-first traversal
+* Configurable maximum pages
+* Configurable crawl depth
+* Configurable concurrency
+* `robots.txt` handling
+* Sitemap discovery
+* Per-page accessibility results
+* Aggregated site score
+
+Example:
+
+```text
+Website
+  │
+  ├── Home
+  ├── Products
+  │     ├── Product A
+  │     └── Product B
+  ├── About
+  └── Contact
+        │
+        ▼
+Accessibility Scan
+        │
+        ▼
+Per-page Findings
+        │
+        ▼
+Site-wide Report
+```
+
+---
+
+# Security
+
+External URL scanning introduces security considerations.
+
+A11yLab includes protections against:
+
+* SSRF
+* Localhost scanning
+* Private IP addresses
+* Internal hostnames
+* Unsafe redirects
+* Uncontrolled crawling
+* Excessive concurrency
+* Resource exhaustion
+
+External scanning should never provide unrestricted access to internal infrastructure.
+
+---
+
+# Observability
+
+The platform supports structured application logging and telemetry.
+
+Key metrics include:
+
+| Metric                | Type      |
+| --------------------- | --------- |
+| `scan.total`          | Counter   |
+| `scan.errors`         | Counter   |
+| `scan.duration_ms`    | Histogram |
+| `crawl.total`         | Counter   |
+| `crawl.errors`        | Counter   |
+| `crawl.duration_ms`   | Histogram |
+| `crawl.pages_scanned` | Histogram |
+
+---
+
+# Technology Stack
+
+| Category             | Technology                    |
+| -------------------- | ----------------------------- |
+| Framework            | Next.js 15                    |
+| UI                   | React 19                      |
+| Language             | TypeScript 5                  |
+| Styling              | Tailwind CSS                  |
+| Accessibility Engine | axe-core                      |
+| Secondary Engine     | IBM Equal Access              |
+| Browser Automation   | Playwright                    |
+| Crawling             | Crawlee                       |
+| Unit Testing         | Vitest                        |
+| E2E Testing          | Playwright                    |
+| PDF Generation       | Puppeteer                     |
+| CLI                  | Commander                     |
+| Containerization     | Docker                        |
+| CI/CD                | GitHub Actions                |
+| Cloud                | Azure                         |
+| Infrastructure       | Azure Bicep                   |
+| Observability        | OpenTelemetry / Azure Monitor |
+
+---
+
+# Project Structure
+
+```text
+a11ylab/
+│
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── scan/
+│   │   │   ├── crawl/
+│   │   │   └── ci/
+│   │   │
+│   │   ├── scan/
+│   │   │   └── [id]/
+│   │   │
+│   │   └── crawl/
+│   │       └── [id]/
+│   │
+│   ├── components/
+│   │   ├── ScanForm/
+│   │   ├── ReportView/
+│   │   └── accessibility/
+│   │
+│   ├── cli/
+│   │
+│   └── lib/
+│       ├── scanner/
+│       │   ├── axe/
+│       │   ├── ibm/
+│       │   └── custom/
+│       │
+│       ├── crawler/
+│       ├── scoring/
+│       ├── reporting/
+│       ├── remediation/
+│       ├── ci/
+│       └── types/
+│
+├── e2e/
+│   ├── accessibility/
+│   ├── keyboard/
+│   └── screen-reader/
+│
+├── docs/
+│   ├── wcag-2.2.md
+│   ├── aria-patterns.md
+│   ├── keyboard-testing.md
+│   ├── screen-reader-testing.md
+│   ├── audit-methodology.md
+│   └── remediation-workflow.md
+│
+├── accessibility-audits/
+│   ├── findings/
+│   └── reports/
+│
+├── remediation-guides/
+│
+├── reports/
+│
+├── action/
+│
+├── infra/
+│
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       ├── accessibility.yml
+│       └── deploy.yml
+│
+├── Dockerfile
+├── package.json
+└── README.md
+```
+
+---
+
+# Accessibility Audit Methodology
+
+A11yLab uses the following evaluation process:
+
+### 1. Automated Analysis
+
+Run accessibility engines against the target application.
+
+### 2. Finding Normalization
+
+Normalize findings from multiple scanning engines.
+
+### 3. Deduplication
+
+Remove duplicate violations reported by multiple engines.
+
+### 4. WCAG Mapping
+
+Map findings to relevant WCAG success criteria.
+
+### 5. Impact Assessment
+
+Prioritize findings according to their effect on users.
+
+### 6. Manual Verification
+
+Validate findings using:
+
+* Keyboard navigation
+* Browser inspection
+* Screen readers
+* Visual inspection
+
+### 7. Remediation
+
+Implement the appropriate code-level fix.
+
+### 8. Verification
+
+Re-run automated and manual tests.
+
+### 9. Regression Prevention
+
+Add automated tests where possible so the issue does not return.
+
+---
+
+# Accessibility Finding Lifecycle
+
+```text
+Detected
+   ↓
+Triaged
+   ↓
+WCAG Mapped
+   ↓
+Reproduced
+   ↓
+Remediation Planned
+   ↓
+Code Fixed
+   ↓
+Automated Test
+   ↓
+Manual Verification
+   ↓
+Verified
+   ↓
+Regression Protected
+```
+
+---
+
+# Developer Accessibility Checklist
+
+Before merging a UI change:
+
+## Semantic Structure
+
+```text
+[ ] Correct semantic HTML
+[ ] Logical heading hierarchy
+[ ] Meaningful landmarks
+[ ] Links used for navigation
+[ ] Buttons used for actions
+```
+
+## Keyboard
+
+```text
+[ ] All controls keyboard accessible
+[ ] Logical tab order
+[ ] Visible focus indicator
+[ ] No keyboard trap
+[ ] Dialog focus handled correctly
+[ ] Escape behavior implemented where required
+```
+
+## Forms
+
+```text
+[ ] Every input has an accessible name
+[ ] Instructions are available
+[ ] Required state is communicated
+[ ] Errors are understandable
+[ ] Error state is programmatically associated
+[ ] Focus moves appropriately after validation
+```
+
+## ARIA
+
+```text
+[ ] Native HTML preferred
+[ ] ARIA used only where necessary
+[ ] Correct role
+[ ] Correct state
+[ ] Correct property
+[ ] Accessible name verified
+```
+
+## Screen Readers
+
+```text
+[ ] VoiceOver tested where applicable
+[ ] NVDA tested where applicable
+[ ] JAWS tested where applicable
+[ ] Dynamic content announced correctly
+[ ] Dialogs announced correctly
+[ ] Form errors announced correctly
+```
+
+## Visual
+
+```text
+[ ] Color contrast checked
+[ ] Information not conveyed by color alone
+[ ] Focus visible
+[ ] Content remains usable at increased zoom
+[ ] Responsive layout remains accessible
+```
+
+---
+
+# Development
+
+## Prerequisites
+
+* Node.js 20+
+* npm 10+
+* Git
+
+Optional:
+
+* Docker
+* macOS for VoiceOver testing
+* Windows for NVDA / JAWS testing
+
+---
+
+## Installation
 
 ```bash
-npm test                # run once
-npm run test:watch      # watch mode
-npm run test:coverage   # with coverage report
+git clone https://github.com/<your-username>/a11ylab.git
+
+cd a11ylab
+
+npm install
 ```
 
-356 unit tests covering scanner engines, result normalization, scoring, crawling, CLI commands,
-report generation, and CI formatters.
+Install Playwright browsers:
 
-### E2E accessibility tests
+```bash
+npx playwright install --with-deps chromium
+```
+
+---
+
+## Development Server
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+---
+
+## Unit Tests
+
+```bash
+npm test
+```
+
+---
+
+## Test Coverage
+
+```bash
+npm run test:coverage
+```
+
+---
+
+## Accessibility Tests
 
 ```bash
 npm run test:a11y
 ```
 
-7 Playwright tests that scan the app's own pages (home, scan results, crawl results, reports)
-against WCAG 2.2 AA to ensure the scanner UI itself is accessible.
+---
 
-### Lint
+## Lint
 
 ```bash
 npm run lint
 ```
 
-## Docker
+---
 
-### Build
-
-```bash
-docker build -t a11y-scan-demo:local .
-```
-
-### Run
+## Production Build
 
 ```bash
-docker run -d --name a11y-scan -p 3000:3000 a11y-scan-demo:local
+npm run build
 ```
 
-The multi-stage Dockerfile:
+---
 
-1. **deps** installs npm dependencies (node:20-alpine)
-2. **builder** builds the Next.js standalone output
-3. **runner** is the production image (node:20-bookworm-slim) with Chromium, Chrome, and procps
-   pre-installed. All node_modules are copied to ensure serverExternalPackages (Crawlee,
-   Azure Monitor OpenTelemetry, etc.) have their full transitive dependency trees.
+# Docker
 
-## Infrastructure
+Build:
 
-Azure deployment is defined in `infra/main.bicep`:
+```bash
+docker build -t a11ylab:local .
+```
 
-* Azure Container Registry (Basic SKU)
-* App Service Plan (Linux)
-* Web App for Containers pulling from ACR
+Run:
 
-Deploy via GitHub Actions (`.github/workflows/deploy.yml`) using OIDC authentication.
+```bash
+docker run -d \
+  --name a11ylab \
+  -p 3000:3000 \
+  a11ylab:local
+```
 
-## CI/CD Pipelines
+---
 
-### CI workflow
+# Environment Variables
 
-The CI workflow (`.github/workflows/ci.yml`) runs on every push to `main` and on pull requests:
+| Variable                                | Required | Default | Description                                  |
+| --------------------------------------- | -------- | ------- | -------------------------------------------- |
+| `PORT`                                  | No       | `3000`  | Application port                             |
+| `LOG_LEVEL`                             | No       | `info`  | Logging level                                |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | No       | —       | Azure Application Insights connection string |
+| `NODE_OPTIONS`                          | No       | —       | Node.js runtime options                      |
 
-1. **Lint** with ESLint
-2. **Unit tests** with Vitest and coverage (thresholds: 80% lines, 80% statements, 80% functions, 65% branches)
-3. **Build** the Next.js production output
-4. **E2E tests** with Playwright self-scan accessibility tests
-5. **Reports** uploaded as artifacts (test results, coverage, accessibility reports)
+---
 
-### Deploy workflow
+# Engineering Principles
 
-The deploy workflow (`.github/workflows/deploy.yml`) builds a Docker image and deploys to Azure
-App Service via OIDC authentication. It provisions infrastructure with Bicep, pushes the image
-to Azure Container Registry, and restarts the web app.
+## Accessibility First
 
-### Accessibility scan workflow
+Accessibility is considered during design, implementation, testing, and deployment.
 
-The accessibility scan workflow (`.github/workflows/a11y-scan.yml`) runs on a weekly schedule
-(Monday 06:00 UTC) and on manual dispatch. It scans three target websites using the deployed
-app's CI API and publishes SARIF results to the GitHub Security tab:
+## Semantic HTML First
 
-| Target | URL |
-| --- | --- |
-| codepen-sample | `https://codepen.io/leezee/pen/eYbXzpJ` |
-| a11y-scan-demo-app | `https://a11y-scan-demo-app.azurewebsites.net/` |
-| ontario-gov | `https://www.ontario.ca/page/government-ontario` |
+Use native HTML semantics before reaching for ARIA.
 
-Each site is scanned independently via matrix strategy. SARIF files are uploaded using
-`github/codeql-action/upload-sarif@v4` with per-site categories, making accessibility
-violations visible as Code Scanning alerts under the repository Security tab.
+## Automated Testing Is Not Enough
 
-### Azure Pipelines
+Automated scanners identify only a subset of accessibility issues.
 
-An equivalent Azure Pipelines definition (`.azuredevops/pipelines/a11y-scan.yml`) scans the
-same three URLs via the deployed app's CI API, using matrix strategy for parallel execution
-and publishing SARIF artifacts. Configure it in Azure DevOps by pointing a pipeline to this
-file in the GitHub repository.
+## Test Real User Workflows
 
-## Observability
+Keyboard and assistive-technology testing validate how people actually interact with the application.
 
-The application includes structured logging and telemetry that work together to provide
-visibility in both the Azure App Service log stream and Application Insights.
+## Fix Root Causes
 
-### Structured logging
+Remediation should improve the underlying component or design pattern rather than hide individual violations.
 
-A lightweight logger (`src/lib/logger.ts`) writes structured messages to stdout/stderr with
-ISO timestamps, log levels, and component names. Every log call also emits an OpenTelemetry
-log record via `@opentelemetry/api-logs`, which the Azure Monitor exporter sends to
-Application Insights as Traces.
+## Prevent Regression
 
-Example log stream output:
+Accessibility testing belongs inside the development and CI/CD workflow.
+
+## Document Decisions
+
+Accessibility findings should explain:
 
 ```text
-[2026-03-08T21:32:57.539Z] [INFO] [api:scan] Scan requested {"scanId":"d340...","url":"https://example.com"}
-[2026-03-08T21:33:07.613Z] [INFO] [telemetry] Scan completed {"scanId":"d340...","durationMs":10073,"score":31}
+What is wrong
+Why it matters
+Who is affected
+Which WCAG criterion applies
+How to fix it
+How the fix was verified
 ```
 
-### HTTP request middleware
+---
 
-A Next.js middleware (`src/middleware.ts`) logs every HTTP request to `/api/*`, `/scan/*`, and
-`/crawl/*` routes with method, path, status code, duration, and user agent.
+# Roadmap
 
-### OpenTelemetry integration
+## Phase 1 — Core Scanner
 
-The telemetry module (`src/lib/telemetry.ts`) emits custom spans and metrics for scan and
-crawl operations:
+* [x] Single-page scanning
+* [x] WCAG 2.2 analysis
+* [x] axe-core integration
+* [x] Multiple scanning engines
+* [x] Result normalization
+* [x] Deduplication
+* [x] Severity classification
 
-| Metric | Type | Description |
-| --- | --- | --- |
-| `scan.total` | Counter | Total scans initiated |
-| `scan.errors` | Counter | Total scan errors |
-| `scan.duration_ms` | Histogram | Duration per scan |
-| `crawl.total` | Counter | Total crawls initiated |
-| `crawl.errors` | Counter | Total crawl errors |
-| `crawl.duration_ms` | Histogram | Duration per crawl |
-| `crawl.pages_scanned` | Histogram | Pages scanned per crawl |
+## Phase 2 — Accessibility Engineering
 
-### Application Insights
+* [ ] Accessible React component library
+* [ ] WCAG remediation examples
+* [ ] WAI-ARIA component patterns
+* [ ] Keyboard interaction tests
+* [ ] Focus-management tests
+* [ ] Accessibility finding workflow
 
-When `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, the instrumentation module
-(`src/instrumentation.ts`) initializes Azure Monitor OpenTelemetry with:
+## Phase 3 — Assistive Technology
 
-* 100% sampling ratio (no telemetry dropped)
-* Live Metrics enabled for real-time monitoring
-* Automatic export of spans, metrics, and log records
+* [ ] VoiceOver testing documentation
+* [ ] NVDA testing documentation
+* [ ] JAWS testing documentation
+* [ ] Screen-reader regression scenarios
 
-Data appears in Application Insights under Traces, Dependencies, Custom Metrics, and Live
-Metrics.
+## Phase 4 — Developer Tooling
 
-## Environment Variables
+* [ ] CLI improvements
+* [ ] SARIF integration
+* [ ] Pull-request accessibility checks
+* [ ] CI accessibility gates
+* [ ] Accessibility regression reporting
 
-| Variable | Required | Default | Description |
-| --- | --- | --- | --- |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | No | (none) | Azure Application Insights connection string. Enables telemetry export. |
-| `LOG_LEVEL` | No | `info` | Minimum log level: `debug`, `info`, `warn`, or `error`. |
-| `PORT` | No | `3000` | Server listening port. |
-| `NODE_OPTIONS` | No | (none) | Set to `--max-old-space-size=1024` in Docker for memory control. |
+## Phase 5 — Engineering Platform
 
-## Scoring
+* [ ] Accessibility dashboard
+* [ ] Site-wide monitoring
+* [ ] Historical accessibility trends
+* [ ] Team-level reporting
+* [ ] Accessibility quality gates
+* [ ] Developer remediation workflows
 
-Scores are calculated using weighted impact severity:
+---
 
-| Impact | Weight |
-| --- | --- |
-| Critical | 10 |
-| Serious | 7 |
-| Moderate | 3 |
-| Minor | 1 |
+# Contributing
 
-**Overall score** = (weighted passes / weighted total) × 100
+Accessibility changes should include:
 
-**Grades:** A (90+), B (70+), C (50+), D (30+), F (<30)
+1. Description of the change.
+2. Accessibility impact.
+3. Relevant WCAG success criteria.
+4. Keyboard testing results.
+5. Screen-reader testing results where applicable.
+6. Automated test results.
+7. Remediation details.
 
-**AODA compliant** when zero violations are found.
+Pull requests should avoid introducing new accessibility regressions.
 
-Site-wide scores aggregate per-page results with overall, lowest, highest, and
-median page scores.
+---
 
-## AI-Assisted Development
+# License
 
-The repository includes Copilot agent customizations under `.github/` that encode AODA
-WCAG 2.2 domain knowledge for AI-assisted accessibility work.
+MIT License
 
-### Agents
+---
 
-| File | Description |
-| --- | --- |
-| `.github/agents/a11y-detector.agent.md` | Detects AODA WCAG 2.2 violations through static code analysis and runtime scanning. Covers the top 10 React/Next.js violations, produces structured findings, and hands off to the Resolver agent. |
-| `.github/agents/a11y-resolver.agent.md` | Resolves AODA WCAG 2.2 violations with standards-compliant code fixes. Applies fixes in priority order (critical → serious → moderate → minor) and can hand back to the Detector for re-scanning. |
+## Accessibility Is Engineering Quality
 
-### Prompts
-
-| File | Description |
-| --- | --- |
-| `.github/prompts/a11y-scan.prompt.md` | Runs an AODA WCAG 2.2 accessibility scan on a target URL or the full project via the Detector agent. Accepts URL and scope (page or site) as inputs. |
-| `.github/prompts/a11y-fix.prompt.md` | Fixes accessibility violations in the current file or project via the Resolver agent. Accepts file path and specific violation IDs as inputs. |
-
-### Instructions
-
-| File | Applies To | Description |
-| --- | --- | --- |
-| `.github/instructions/wcag22-rules.instructions.md` | `*.tsx, *.jsx, *.ts, *.html, *.css` | WCAG 2.2 Level AA compliance rules organized by POUR principles (Perceivable, Operable, Understandable, Robust) with React/Next.js-specific guidance. |
-| `.github/instructions/a11y-remediation.instructions.md` | `*.tsx, *.jsx, *.ts, *.html, *.css` | Remediation lookup table mapping violation IDs to WCAG success criteria and code fix patterns, including React hooks and Next.js component recipes. |
-| `.github/instructions/ado-workflow.instructions.md` | `**` | Required workflow for Azure DevOps work item tracking, Git branching (`feature/{id}-description`), commit message linking (`AB#{id}`), pull request creation, and post-merge branch cleanup. |
-
-## Demo Applications
-
-This repository embeds 5 intentionally inaccessible web applications used as scan targets
-for workshop exercises and CI/CD pipeline testing:
-
-| App | Language | Theme | Local Port |
-| --- | --- | --- | --- |
-| a11y-demo-app-001 | Rust | Travel Agency | 8001 |
-| a11y-demo-app-002 | C# | E-Commerce | 8002 |
-| a11y-demo-app-003 | Java | Learning Platform | 8003 |
-| a11y-demo-app-004 | Python | Recipe Sharing | 8004 |
-| a11y-demo-app-005 | Go | Fitness Tracker | 8005 |
-
-Each app contains 15+ intentional WCAG 2.2 violations across categories including missing
-alt text, contrast failures, keyboard traps, heading hierarchy violations, and more. Use
-`scripts/bootstrap-demo-apps.ps1` to create individual repositories from these templates.
-
-## Scripts
-
-| Script | Purpose |
-| --- | --- |
-| `scripts/bootstrap-demo-apps.ps1` | Creates demo app repos from template directories, configures OIDC secrets, environments, and wikis |
-| `scripts/setup-oidc.ps1` | Creates Azure AD app registration with federated credentials for GitHub Actions OIDC auth |
-
-### Bootstrap Quick Start
-
-```powershell
-# 1. Log in to Azure CLI
-az login
-
-# 2. Log in to GitHub CLI with org admin permissions
-gh auth login
-
-# 3. Run OIDC setup (creates Azure AD app and federated credentials)
-./scripts/setup-oidc.ps1
-
-# 4. Run bootstrap (creates 5 demo app repos, configures secrets)
-./scripts/bootstrap-demo-apps.ps1
-```
-
-## Project Structure
+A11yLab is built around a simple principle:
 
 ```text
-a11y-demo-app-001/               # Rust/Actix-web travel booking demo app (port 8001)
-a11y-demo-app-002/               # C#/ASP.NET e-commerce demo app (port 8002)
-a11y-demo-app-003/               # Java/Spring Boot learning platform demo app (port 8003)
-a11y-demo-app-004/               # Python/Flask recipe sharing demo app (port 8004)
-a11y-demo-app-005/               # Go fitness tracker demo app (port 8005)
-scripts/
-├── bootstrap-demo-apps.ps1      # Create demo app repos from templates
-└── setup-oidc.ps1               # Azure AD OIDC federation setup
-src/
-├── instrumentation.ts          # OpenTelemetry + Azure Monitor bootstrap
-├── middleware.ts                # HTTP request logging middleware
-├── app/                         # Next.js pages and API routes
-│   ├── api/scan/                # Single-page scan API
-│   ├── api/crawl/               # Site crawl API
-│   ├── api/ci/                  # CI threshold API (scan + crawl)
-│   ├── scan/[id]/               # Scan results page
-│   └── crawl/[id]/              # Crawl results page
-├── cli/                         # CLI tool (scan, crawl commands)
-├── components/                  # React components (ScanForm, ReportView, etc.)
-└── lib/
-    ├── logger.ts                # Structured logger (stdout + OTel log records)
-    ├── telemetry.ts             # Custom spans and metrics for scans/crawls
-    ├── scanner/                 # Multi-engine scanner (axe, IBM, custom)
-    ├── crawler/                 # Site crawler (robots, sitemap, URL utils)
-    ├── scoring/                 # WCAG scoring and grading
-    ├── report/                  # Report generators (HTML, PDF, SARIF)
-    ├── ci/                      # CI threshold checking and formatters
-    └── types/                   # TypeScript type definitions
-e2e/                             # Playwright self-scan accessibility tests
-infra/                           # Azure Bicep infrastructure
-action/                          # GitHub Action definition
-.github/
-├── agents/
-│   ├── a11y-detector.agent.md   # WCAG violation detection agent
-│   └── a11y-resolver.agent.md   # WCAG violation fix agent
-├── prompts/
-│   ├── a11y-scan.prompt.md      # Accessibility scan prompt
-│   └── a11y-fix.prompt.md       # Accessibility fix prompt
-├── instructions/
-│   ├── wcag22-rules.instructions.md        # WCAG 2.2 AA compliance rules
-│   ├── a11y-remediation.instructions.md    # Remediation patterns and recipes
-│   └── ado-workflow.instructions.md        # ADO work item and branching workflow
-└── workflows/
-    ├── ci.yml                   # Lint, test, build on push/PR
-    ├── deploy.yml               # Docker build + Azure deploy
-    └── a11y-scan.yml            # Scheduled SARIF accessibility scan
+Design inclusively
+       ↓
+Build accessibly
+       ↓
+Test automatically
+       ↓
+Test manually
+       ↓
+Fix systematically
+       ↓
+Verify with assistive technology
+       ↓
+Prevent regressions
 ```
 
-## Related Repositories
+**Build for everyone. Test for everyone.**
 
-| Repository | Description |
-|------------|-------------|
-| [Agentic Accelerator Framework](https://github.com/devopsabcs-engineering/agentic-accelerator-framework) | Agent definitions, instructions, skills, and CI/CD workflows |
-| [Accessibility Scan Workshop](https://devopsabcs-engineering.github.io/accessibility-scan-workshop/) | Hands-on workshop for WCAG 2.2 accessibility scanning |
-
-## License
-
-This project is private.
+```
+```
