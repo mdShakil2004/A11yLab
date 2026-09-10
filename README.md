@@ -157,6 +157,207 @@ Semantic HTML is preferred whenever native browser semantics provide the require
 
 ---
 
+# Architecture
+
+A11yLab follows a layered architecture separating the client interfaces, application APIs, accessibility engines, result-processing pipeline, crawling infrastructure, observability, and deployment environment.
+
+```mermaid
+flowchart TB
+
+    subgraph CLIENT["Client Layer"]
+        Browser["Browser"]
+        CLI["CLI"]
+        GHA["GitHub Actions"]
+    end
+
+    subgraph APP["Next.js Application"]
+        UI["Web UI"]
+
+        subgraph WEB["Web Pages"]
+            Home["Home Page"]
+            ScanResults["Scan Results"]
+            CrawlResults["Crawl Results"]
+        end
+
+        Middleware["HTTP Request Logging"]
+
+        subgraph API["API Routes"]
+            ScanAPI["POST /api/scan"]
+            CrawlAPI["POST /api/crawl"]
+            CIScanAPI["POST /api/ci/scan"]
+            CICrawlAPI["POST /api/ci/crawl"]
+            StatusAPI["GET /api/scan/[id]/status"]
+            ResultAPI["GET /api/scan/[id]"]
+            PDFAPI["GET /api/scan/[id]/pdf"]
+        end
+    end
+
+    subgraph SCANNER["Accessibility Scanner"]
+        Axe["axe-core"]
+        IBM["IBM Equal Access"]
+        Custom["Custom Playwright Checks"]
+    end
+
+    subgraph CRAWLER["Site Crawler"]
+        Crawlee["Crawlee / Playwright"]
+        Robots["robots.txt"]
+        Sitemap["Sitemap Discovery"]
+    end
+
+    subgraph PIPELINE["Result Processing Pipeline"]
+        Normalizer["Normalizer"]
+        Deduplicator["Deduplicator"]
+        Mapper["WCAG Mapper"]
+        Scorer["WCAG Scorer"]
+        Formatters["Report Formatters"]
+    end
+
+    subgraph REPORTS["Report Formats"]
+        JSON["JSON"]
+        SARIF["SARIF"]
+        JUnit["JUnit XML"]
+        HTML["HTML"]
+        PDF["PDF"]
+    end
+
+    Store["In-Memory Result Store"]
+
+    subgraph OBS["Observability"]
+        Logger["Structured Logger"]
+        Telemetry["Telemetry"]
+        Instrumentation["Instrumentation"]
+    end
+
+    subgraph AZURE["Azure"]
+        ACR["Azure Container Registry"]
+        AppService["Azure App Service"]
+        AppInsights["Application Insights"]
+    end
+
+    subgraph GITHUB["GitHub"]
+        Security["Code Scanning / Security Tab"]
+    end
+
+    Browser --> UI
+    CLI --> CIScanAPI
+    CLI --> CICrawlAPI
+    GHA --> CIScanAPI
+    GHA --> CICrawlAPI
+
+    UI --> Home
+    UI --> ScanResults
+    UI --> CrawlResults
+
+    Browser --> Middleware
+    Middleware --> ScanAPI
+    Middleware --> CrawlAPI
+
+    ScanAPI --> Axe
+    ScanAPI --> IBM
+    ScanAPI --> Custom
+
+    CrawlAPI --> Crawlee
+    Crawlee --> Robots
+    Crawlee --> Sitemap
+
+    Crawlee --> Axe
+    Crawlee --> IBM
+    Crawlee --> Custom
+
+    Axe --> Normalizer
+    IBM --> Normalizer
+    Custom --> Normalizer
+
+    Normalizer --> Deduplicator
+    Deduplicator --> Mapper
+    Mapper --> Scorer
+    Scorer --> Formatters
+
+    Formatters --> JSON
+    Formatters --> SARIF
+    Formatters --> JUnit
+    Formatters --> HTML
+    Formatters --> PDF
+
+    Formatters --> Store
+
+    StatusAPI --> Store
+    ResultAPI --> Store
+    PDFAPI --> Store
+
+    Logger --> Instrumentation
+    Telemetry --> Instrumentation
+    Instrumentation --> AppInsights
+
+    AppService --> ACR
+    SARIF --> Security
+```
+
+### Architecture Flow
+
+```text
+Browser
+   │
+   ├── Web UI
+   │
+   └── Scan / Crawl APIs
+             │
+             ▼
+      Accessibility Engines
+       ┌──────┼──────┐
+       │      │      │
+      axe    IBM   Custom
+       │      │      │
+       └──────┼──────┘
+              ▼
+         Normalizer
+              │
+              ▼
+         Deduplicator
+              │
+              ▼
+          WCAG Mapper
+              │
+              ▼
+          WCAG Scorer
+              │
+              ▼
+        Report Formatters
+       ┌──────┼──────┬──────┐
+       │      │      │      │
+      JSON  SARIF  JUnit  PDF/HTML
+              │
+              ▼
+        Result Store
+```
+
+For site-wide scans:
+
+```text
+Crawl API
+    │
+    ▼
+Crawlee
+    │
+    ├── robots.txt
+    ├── Sitemap
+    └── Link Discovery
+            │
+            ▼
+      Page-by-Page Scan
+            │
+            ▼
+   Accessibility Engines
+            │
+            ▼
+     Result Pipeline
+            │
+            ▼
+      Site-Wide Report
+```
+
+---
+
 # Scanning Architecture
 
 A11yLab uses multiple complementary accessibility engines.
@@ -425,8 +626,6 @@ Test areas:
 * Error messages
 * Focus changes
 
----
-
 ## NVDA
 
 Target environment:
@@ -448,8 +647,6 @@ Test areas:
 * Status messages
 * Dynamic content
 * Keyboard interaction
-
----
 
 ## JAWS
 
@@ -552,7 +749,7 @@ A11yLab intentionally combines automated and manual testing.
           │                             │
     ┌─────┼─────┐                ┌─────┼─────┐
     │     │     │                │     │     │
-   axe  IBM  Custom          Keyboard  SR  Visual
+   axe   IBM  Custom          Keyboard  SR  Visual
     │     │     │                │     │     │
     └─────┼─────┘                └─────┼─────┘
           │                             │
@@ -602,7 +799,7 @@ npm run build
 
 the accessibility scanner can be used through the CLI.
 
-## Single-page scan
+## Single-Page Scan
 
 ```bash
 a11y-scan scan \
@@ -612,7 +809,7 @@ a11y-scan scan \
   --output results/
 ```
 
-## Site-wide crawl
+## Site-Wide Crawl
 
 ```bash
 a11y-scan crawl \
@@ -731,8 +928,6 @@ The CI pipeline can enforce thresholds based on:
 # SARIF Integration
 
 Accessibility results can be exported as SARIF and integrated with GitHub's code-scanning workflow.
-
-Example:
 
 ```text
 Application
@@ -883,6 +1078,8 @@ Key metrics include:
 ```text
 a11ylab/
 │
+├── scripts/
+│
 ├── src/
 │   ├── app/
 │   │   ├── api/
@@ -904,6 +1101,9 @@ a11ylab/
 │   ├── cli/
 │   │
 │   └── lib/
+│       ├── logger.ts
+│       ├── telemetry.ts
+│       │
 │       ├── scanner/
 │       │   ├── axe/
 │       │   ├── ibm/
@@ -911,8 +1111,7 @@ a11ylab/
 │       │
 │       ├── crawler/
 │       ├── scoring/
-│       ├── reporting/
-│       ├── remediation/
+│       ├── report/
 │       ├── ci/
 │       └── types/
 │
@@ -920,14 +1119,6 @@ a11ylab/
 │   ├── accessibility/
 │   ├── keyboard/
 │   └── screen-reader/
-│
-├── docs/
-│   ├── wcag-2.2.md
-│   ├── aria-patterns.md
-│   ├── keyboard-testing.md
-│   ├── screen-reader-testing.md
-│   ├── audit-methodology.md
-│   └── remediation-workflow.md
 │
 ├── accessibility-audits/
 │   ├── findings/
@@ -942,6 +1133,9 @@ a11ylab/
 ├── infra/
 │
 ├── .github/
+│   ├── agents/
+│   ├── prompts/
+│   ├── instructions/
 │   └── workflows/
 │       ├── ci.yml
 │       ├── accessibility.yml
