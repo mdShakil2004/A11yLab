@@ -1,0 +1,100 @@
+# Reusable template: Deploy a single app (infra + build + deploy)
+# Called from deploy-all.yml for each demo app
+
+parameters:
+  - name: stageId
+    type: string
+  - name: stageName
+    type: string
+  - name: appName
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: repository
+    type: string
+  - name: containerPort
+    type: string
+    default: '8080'
+
+stages:
+  - stage: ${{ parameters.stageId }}
+    displayName: ${{ parameters.stageName }}
+    dependsOn: []
+    jobs:
+      - job: DeployApp
+        displayName: 'Deploy ${{ parameters.appName }}'
+        steps:
+          - checkout: ${{ parameters.repository }}
+            path: ${{ parameters.appName }}
+
+          - task: AzureCLI@2
+            displayName: 'Deploy infrastructure'
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -e
+                echo "Build.SourcesDirectory: $(Build.SourcesDirectory)"
+                echo "Agent.BuildDirectory: $(Agent.BuildDirectory)"
+                ls -la "$(Agent.BuildDirectory)/s/" || true
+                ls -la "$(Agent.BuildDirectory)/" || true
+                cd "$(Agent.BuildDirectory)/${{ parameters.appName }}"
+                ls -la infra/
+                az group create \
+                  --name ${{ parameters.resourceGroup }} \
+                  --location $(location)
+                az deployment group create \
+                  --resource-group ${{ parameters.resourceGroup }} \
+                  --name infra-deploy \
+                  --template-file infra/main.bicep \
+                  --parameters infra/main.parameters.json \
+                  --parameters imageTag=$(Build.BuildId) \
+                               containerPort=${{ parameters.containerPort }}
+
+          - task: AzureCLI@2
+            displayName: 'Build and push Docker image'
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -e
+                cd "$(Agent.BuildDirectory)/${{ parameters.appName }}"
+                ACR_NAME=$(az deployment group show \
+                  --resource-group ${{ parameters.resourceGroup }} \
+                  --name infra-deploy \
+                  --query 'properties.outputs.acrName.value' -o tsv)
+                echo "ACR: $ACR_NAME"
+                az acr build \
+                  --registry "$ACR_NAME" \
+                  --image ${{ parameters.appName }}:$(Build.BuildId) .
+
+          - task: AzureCLI@2
+            displayName: 'Deploy container to Web App'
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -e
+                WEB_APP_NAME=$(az deployment group show \
+                  --resource-group ${{ parameters.resourceGroup }} \
+                  --name infra-deploy \
+                  --query 'properties.outputs.webAppName.value' -o tsv)
+                ACR_LOGIN=$(az deployment group show \
+                  --resource-group ${{ parameters.resourceGroup }} \
+                  --name infra-deploy \
+                  --query 'properties.outputs.acrLoginServer.value' -o tsv)
+                az webapp config container set \
+                  --name $WEB_APP_NAME \
+                  --resource-group ${{ parameters.resourceGroup }} \
+                  --container-image-name "$ACR_LOGIN/${{ parameters.appName }}:$(Build.BuildId)"
+                az webapp restart \
+                  --name $WEB_APP_NAME \
+                  --resource-group ${{ parameters.resourceGroup }}
+                SITE_URL=$(az deployment group show \
+                  --resource-group ${{ parameters.resourceGroup }} \
+                  --name infra-deploy \
+                  --query 'properties.outputs.webAppUrl.value' -o tsv)
+                echo "Deployed ${{ parameters.appName }} to: $SITE_URL"

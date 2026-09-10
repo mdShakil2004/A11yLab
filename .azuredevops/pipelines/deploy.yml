@@ -1,0 +1,108 @@
+# Deploy runs ONLY after scanner-ci succeeds on main. Using a pipeline
+# completion trigger (instead of its own branch trigger) means build, lint,
+# unit, and accessibility tests gate the deployment rather than racing it.
+trigger: none
+pr: none
+
+# Build platforms. Defaults to linux/amd64 only: a two-platform buildx run
+# fills the hosted agent's disk during the export-to-image layer (the Playwright
+# + Puppeteer browser layers are large). Set buildPlatforms to
+# 'linux/amd64,linux/arm64' when an arm64 image is actually needed.
+parameters:
+  - name: buildPlatforms
+    type: string
+    default: 'linux/amd64'
+
+resources:
+  pipelines:
+    - pipeline: scannerCi
+      source: scanner-ci # must match the CI pipeline's name in Azure DevOps
+      trigger:
+        branches:
+          include: [main]
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  resourceGroup: 'rg-a11y-scan-demo'
+  appName: 'a11y-scan-demo'
+  location: 'canadacentral'
+  serviceConnection: 'a11y-scanner-ado'
+
+steps:
+  - checkout: self
+
+  - task: AzureCLI@2
+    displayName: 'Ensure resource group exists'
+    inputs:
+      azureSubscription: $(serviceConnection)
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: az group create --name $(resourceGroup) --location $(location)
+
+  - task: AzureCLI@2
+    displayName: 'Deploy infrastructure'
+    name: infra
+    inputs:
+      azureSubscription: $(serviceConnection)
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        OUTPUTS=$(az deployment group create \
+          --resource-group $(resourceGroup) \
+          --template-file infra/main.bicep \
+          --parameters appName=$(appName) imageTag=latest \
+          --query 'properties.outputs' -o json)
+        echo "##vso[task.setvariable variable=acrName;isOutput=true]$(echo $OUTPUTS | jq -r '.acrName.value')"
+        echo "##vso[task.setvariable variable=acrLoginServer;isOutput=true]$(echo $OUTPUTS | jq -r '.acrLoginServer.value')"
+        echo "##vso[task.setvariable variable=webAppName;isOutput=true]$(echo $OUTPUTS | jq -r '.webAppName.value')"
+        echo "##vso[task.setvariable variable=webAppUrl;isOutput=true]$(echo $OUTPUTS | jq -r '.webAppUrl.value')"
+
+  - task: AzureCLI@2
+    displayName: 'Build and push image (${{ parameters.buildPlatforms }})'
+    inputs:
+      azureSubscription: $(serviceConnection)
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        PLATFORMS='${{ parameters.buildPlatforms }}'
+
+        # Reclaim agent disk before the image export. The hosted agent ships
+        # with large SDK/toolcache content that the build does not need; freeing
+        # it avoids 'no space left on device' during the buildx export layer.
+        echo "Disk before cleanup:"; df -h /
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+          /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
+        docker system prune -af --volumes || true
+        echo "Disk after cleanup:"; df -h /
+
+        az acr login --name $(infra.acrName)
+        IMAGE=$(infra.acrLoginServer)/$(appName)
+
+        # Enable cross-architecture builds only when more than one platform is
+        # requested (QEMU emulation + a docker-container buildx builder are
+        # required to emit a multi-platform manifest list).
+        if [[ "$PLATFORMS" == *,* ]]; then
+          docker run --privileged --rm tonistiigi/binfmt --install arm64,amd64
+          docker buildx create --name multiarch --driver docker-container --use 2>/dev/null \
+            || docker buildx use multiarch
+          docker buildx inspect --bootstrap
+        fi
+
+        # buildx --push is required for multi-arch (a manifest list cannot be
+        # loaded into the local docker engine); it also works for single-arch.
+        docker buildx build \
+          --platform "$PLATFORMS" \
+          -t $IMAGE:latest \
+          --push .
+
+  - task: AzureCLI@2
+    displayName: 'Restart Web App'
+    inputs:
+      azureSubscription: $(serviceConnection)
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        az webapp restart --name $(infra.webAppName) --resource-group $(resourceGroup)

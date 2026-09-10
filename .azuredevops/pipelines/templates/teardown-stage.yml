@@ -1,0 +1,50 @@
+# Reusable template: Teardown all demo resource groups
+# Uses the 'teardown' environment which should have an approval gate configured
+
+parameters:
+  - name: resourceGroups
+    type: object
+    default:
+      - 'rg-a11y-demo-app-001'
+      - 'rg-a11y-demo-app-002'
+      - 'rg-a11y-demo-app-003'
+      - 'rg-a11y-demo-app-004'
+      - 'rg-a11y-demo-app-005'
+      - 'rg-a11y-scan-demo'
+  - name: dependsOn
+    type: object
+    default: []
+
+stages:
+  - stage: Teardown
+    displayName: 'Teardown All Resources'
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: succeeded()
+    jobs:
+      - deployment: TeardownAll
+        displayName: 'Delete all demo resource groups'
+        environment: 'teardown'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - ${{ each rg in parameters.resourceGroups }}:
+                  - task: AzureCLI@2
+                    displayName: 'Delete ${{ rg }}'
+                    inputs:
+                      azureSubscription: '$(serviceConnection)'
+                      scriptType: bash
+                      scriptLocation: inlineScript
+                      inlineScript: |
+                        if az group exists --name ${{ rg }} | grep -q true; then
+                          echo "Deleting resource group: ${{ rg }}"
+                          az group delete --name ${{ rg }} --yes --no-wait
+                          echo "Deletion initiated for ${{ rg }}"
+                        else
+                          echo "Resource group ${{ rg }} does not exist, skipping."
+                        fi
+
+                - script: |
+                    echo "Teardown initiated for all resource groups."
+                    echo "Resource group deletions are running asynchronously."
+                  displayName: 'Teardown summary'

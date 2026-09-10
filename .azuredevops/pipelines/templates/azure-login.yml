@@ -1,0 +1,23 @@
+# Reusable template: Azure CLI login via service connection
+# Usage:
+#   - template: templates/azure-login.yml
+#     parameters:
+#       inlineScript: 'az group list -o table'
+
+parameters:
+  - name: serviceConnection
+    type: string
+    default: 'a11y-scanner-ado'
+  - name: scriptType
+    type: string
+    default: 'bash'
+  - name: inlineScript
+    type: string
+
+steps:
+  - task: AzureCLI@2
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: ${{ parameters.scriptType }}
+      scriptLocation: inlineScript
+      inlineScript: ${{ parameters.inlineScript }}

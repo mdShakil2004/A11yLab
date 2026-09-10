@@ -1,0 +1,88 @@
+name: 'Accessibility Scan'
+description: 'Run WCAG 2.2 accessibility scan on a URL'
+inputs:
+  url:
+    description: 'URL to scan'
+    required: true
+  mode:
+    description: 'Scan mode: single or crawl'
+    required: false
+    default: 'single'
+  threshold:
+    description: 'Minimum accessibility score (0-100)'
+    required: false
+    default: '70'
+  max-pages:
+    description: 'Maximum pages to crawl (crawl mode only)'
+    required: false
+    default: '50'
+  output-format:
+    description: 'Output format: json, sarif, junit'
+    required: false
+    default: 'sarif'
+  output-directory:
+    description: 'Directory for output files'
+    required: false
+    default: './a11y-results'
+outputs:
+  score:
+    description: 'Accessibility score (0-100)'
+    value: ${{ steps.scan.outputs.score }}
+  passed:
+    description: 'Whether the scan passed the threshold'
+    value: ${{ steps.scan.outputs.passed }}
+  report-path:
+    description: 'Path to the output report file'
+    value: ${{ steps.scan.outputs.report-path }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - name: Install dependencies
+      run: npm ci
+      shell: bash
+      working-directory: ${{ github.action_path }}
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+      shell: bash
+    - name: Run scan
+      id: scan
+      run: |
+        mkdir -p "${{ inputs.output-directory }}"
+        REPORT_FILE="${{ inputs.output-directory }}/a11y-report.${{ inputs.output-format == 'junit' && 'xml' || 'json' }}"
+
+        if [ "${{ inputs.mode }}" = "crawl" ]; then
+          CMD="npx ts-node src/cli/bin/a11y-scan.ts crawl"
+          CMD="$CMD --url '${{ inputs.url }}'"
+          CMD="$CMD --max-pages ${{ inputs.max-pages }}"
+          CMD="$CMD --threshold ${{ inputs.threshold }}"
+          CMD="$CMD --format ${{ inputs.output-format }}"
+          CMD="$CMD --output $REPORT_FILE"
+        else
+          CMD="npx ts-node src/cli/bin/a11y-scan.ts scan"
+          CMD="$CMD --url '${{ inputs.url }}'"
+          CMD="$CMD --threshold ${{ inputs.threshold }}"
+          CMD="$CMD --format ${{ inputs.output-format }}"
+          CMD="$CMD --output $REPORT_FILE"
+        fi
+
+        EXIT_CODE=0
+        eval $CMD || EXIT_CODE=$?
+
+        echo "report-path=$REPORT_FILE" >> $GITHUB_OUTPUT
+
+        if [ "${{ inputs.output-format }}" = "json" ] && [ -f "$REPORT_FILE" ]; then
+          SCORE=$(cat "$REPORT_FILE" | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8');const j=JSON.parse(d);console.log(j.score||0)")
+          PASSED=$(cat "$REPORT_FILE" | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8');const j=JSON.parse(d);console.log(j.passed||false)")
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+        else
+          echo "score=" >> $GITHUB_OUTPUT
+          echo "passed=$([ $EXIT_CODE -eq 0 ] && echo true || echo false)" >> $GITHUB_OUTPUT
+        fi
+
+        exit $EXIT_CODE
+      shell: bash

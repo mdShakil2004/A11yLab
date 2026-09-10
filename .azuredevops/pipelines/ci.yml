@@ -1,0 +1,75 @@
+trigger:
+  batch: true
+  branches:
+    include: [main]
+
+pr:
+  branches:
+    include: [main]
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: a11y-scan-config
+
+steps:
+  - checkout: self
+
+  - task: UseNode@1
+    inputs:
+      version: '20.x'
+    displayName: 'Use Node.js 20.x'
+
+  - script: npm ci
+    displayName: 'Install dependencies'
+
+  - script: npm run lint
+    displayName: 'Lint'
+
+  - script: npm run test:ci
+    displayName: 'Test with coverage'
+
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: 'test-results/junit.xml'
+      testRunTitle: 'Unit Tests'
+    condition: always()
+    displayName: 'Publish unit test results'
+
+  - task: PublishCodeCoverageResults@2
+    inputs:
+      summaryFileLocation: 'coverage/cobertura-coverage.xml'
+    condition: always()
+    displayName: 'Publish code coverage'
+
+  - task: Cache@2
+    inputs:
+      key: 'nextjs | "$(Agent.OS)" | package-lock.json | src/**'
+      path: .next/cache
+    displayName: 'Cache Next.js build'
+
+  - script: npm run build
+    displayName: 'Build'
+
+  - script: npx playwright install --with-deps chromium
+    displayName: 'Install Playwright'
+
+  - script: npm run test:a11y
+    displayName: 'Accessibility tests'
+
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: 'test-results/a11y-junit.xml'
+      testRunTitle: 'Accessibility Tests'
+    condition: always()
+    displayName: 'Publish accessibility test results'
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: 'playwright-report/'
+      artifactName: 'a11y-results'
+    condition: always()
+    displayName: 'Publish accessibility report'

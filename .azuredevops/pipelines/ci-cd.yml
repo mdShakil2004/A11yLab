@@ -1,0 +1,157 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: wiki-access
+  - name: serviceConnection
+    value: 'AODA-svc-conn'
+  - name: appName
+    value: 'a11y-scan-demo'
+  - name: resourceGroup
+    value: 'rg-a11y-scan-demo'
+  - name: location
+    value: 'canadacentral'
+  - name: imageTag
+    value: '$(Build.BuildId)'
+
+stages:
+  - stage: Build
+    displayName: 'Build & Push Image'
+    jobs:
+      - job: BuildAndPush
+        displayName: 'Deploy infra, build and push to ACR'
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: 'Deploy infrastructure'
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -e
+                az group create --name $(resourceGroup) --location $(location)
+                az deployment group create \
+                  --resource-group $(resourceGroup) \
+                  --name infra-deploy \
+                  --template-file infra/main.bicep \
+                  --parameters infra/main.parameters.json \
+                  --parameters imageTag=$(imageTag)
+
+          - task: AzureCLI@2
+            displayName: 'Build and push Docker image'
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -e
+                ACR_NAME=$(az deployment group show \
+                  --resource-group $(resourceGroup) \
+                  --name infra-deploy \
+                  --query 'properties.outputs.acrName.value' -o tsv)
+                echo "ACR: $ACR_NAME"
+                az acr build \
+                  --registry "$ACR_NAME" \
+                  --image $(appName):$(imageTag) .
+
+  - stage: Deploy
+    displayName: 'Deploy to Azure'
+    dependsOn: Build
+    jobs:
+      - deployment: DeployWebApp
+        displayName: 'Deploy container to Web App'
+        environment: 'deploy'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: AzureCLI@2
+                  name: deployStep
+                  displayName: 'Update Web App container'
+                  inputs:
+                    azureSubscription: '$(serviceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      WEB_APP_NAME=$(az deployment group show \
+                        --resource-group $(resourceGroup) \
+                        --name infra-deploy \
+                        --query 'properties.outputs.webAppName.value' -o tsv)
+                      ACR_LOGIN=$(az deployment group show \
+                        --resource-group $(resourceGroup) \
+                        --name infra-deploy \
+                        --query 'properties.outputs.acrLoginServer.value' -o tsv)
+                      az webapp config container set \
+                        --name $WEB_APP_NAME \
+                        --resource-group $(resourceGroup) \
+                        --container-image-name "$ACR_LOGIN/$(appName):$(imageTag)"
+                      az webapp restart \
+                        --name $WEB_APP_NAME \
+                        --resource-group $(resourceGroup)
+                      SITE_URL="https://$WEB_APP_NAME.azurewebsites.net"
+                      echo "Deployed to: $SITE_URL"
+                      echo "##vso[task.setvariable variable=siteUrl;isOutput=true]$SITE_URL"
+
+                - script: |
+                    echo "Waiting for app to warm up..."
+                    sleep 30
+                    npx --yes playwright install --with-deps chromium
+                    npx playwright screenshot \
+                      --viewport-size="1280,900" \
+                      --wait-for-timeout=5000 \
+                      --full-page \
+                      "$(deployStep.siteUrl)" \
+                      screenshot.png
+                    echo "Screenshot captured"
+                  displayName: 'Capture deployment screenshot'
+
+                - script: |
+                    set -e
+                    WIKI_REPO="https://$(WIKI_PAT)@dev.azure.com/MngEnvMCAP675646/AODA%20WCAG%20compliance/_git/AODA-WCAG-compliance.wiki"
+                    SITE_URL="$(deployStep.siteUrl)"
+                    APP="$(appName)"
+                    BUILD_NUM="$(Build.BuildNumber)"
+                    BUILD_ID="$(Build.BuildId)"
+                    BUILD_URL="https://dev.azure.com/MngEnvMCAP675646/AODA%20WCAG%20compliance/_build/results?buildId=$BUILD_ID"
+                    ATTACH_NAME="${APP}-${BUILD_ID}.png"
+
+                    git clone --depth 1 "$WIKI_REPO" wiki
+                    mkdir -p wiki/.attachments wiki/Deployments
+                    cp screenshot.png "wiki/.attachments/$ATTACH_NAME"
+
+                    cat > "wiki/Deployments/${APP}.md" <<EOF
+                    # ${APP}
+
+                    **Latest Deployment:** ${BUILD_NUM}
+
+                    **Date:** $(date -u '+%Y-%m-%d %H:%M UTC')
+
+                    **Site:** [${SITE_URL}](${SITE_URL})
+
+                    **Pipeline:** [Build ${BUILD_ID}](${BUILD_URL})
+
+                    ---
+
+                    ![Deployment Screenshot](/.attachments/${ATTACH_NAME})
+                    EOF
+                    sed -i 's/^                    //g' "wiki/Deployments/${APP}.md"
+
+                    cd wiki
+                    git config user.email "pipeline@dev.azure.com"
+                    git config user.name "Azure Pipeline"
+                    git add -A
+                    git diff --cached --quiet && echo "No wiki changes" || {
+                      git commit -m "Update deployment screenshot for ${APP} (build ${BUILD_ID})"
+                      git push origin wikiMaster
+                      echo "Wiki updated: /Deployments/${APP}"
+                    }
+                  displayName: 'Update wiki with deployment screenshot'

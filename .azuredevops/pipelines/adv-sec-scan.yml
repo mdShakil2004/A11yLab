@@ -1,0 +1,52 @@
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - group: a11y-scan-config
+
+steps:
+  - task: AdvancedSecurity-Codeql-Init@1
+    inputs:
+      languages: 'javascript, python'
+    displayName: 'Initialize CodeQL'
+
+  - task: AdvancedSecurity-Dependency-Scanning@1
+    displayName: 'Dependency scanning'
+
+  - task: AdvancedSecurity-Codeql-Analyze@1
+    displayName: 'CodeQL analysis'
+
+  - script: |
+      mkdir -p results
+      HTTP_STATUS=$(curl -s -o results/a11y-scan.sarif -w "%{http_code}" \
+        -X POST "$(SCANNER_URL)/api/ci/scan" \
+        -H "Content-Type: application/json" \
+        -d '{"url": "$(SCANNER_URL)", "format": "sarif"}' \
+        --max-time 120)
+
+      echo "HTTP status: $HTTP_STATUS"
+
+      if [ "$HTTP_STATUS" -ne 200 ]; then
+        echo "##vso[task.logissue type=warning]Accessibility scan failed (HTTP $HTTP_STATUS)"
+        cat results/a11y-scan.sarif
+      else
+        echo "SARIF file written: results/a11y-scan.sarif"
+        echo "File size: $(wc -c < results/a11y-scan.sarif) bytes"
+      fi
+    displayName: 'Run accessibility scan'
+    timeoutInMinutes: 5
+
+  - script: |
+      ADVSEC_DIR="$(Agent.TempDirectory)/.advsec"
+      mkdir -p "$ADVSEC_DIR"
+      cp results/*.sarif "$ADVSEC_DIR/" 2>/dev/null || true
+      echo "Staged SARIF files for Advanced Security:"
+      ls -la "$ADVSEC_DIR/"
+    condition: always()
+    displayName: 'Stage SARIF for Advanced Security'
+
+  - task: AdvancedSecurity-Publish@1
+    displayName: 'Publish results to Advanced Security'

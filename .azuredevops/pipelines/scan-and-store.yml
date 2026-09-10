@@ -1,0 +1,38 @@
+trigger: none
+pr: none
+
+schedules:
+  - cron: '0 6 * * 1'
+    displayName: 'Weekly Monday 06:00 UTC scan and store'
+    branches:
+      include: [main]
+    always: true
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: a11y-scan-config
+  - group: a11y-app-urls
+  - name: serviceConnection
+    value: 'a11y-scanner-ado'
+  - name: storageAccount
+    value: 'a11yscan7yt3mwgxp3wiy'
+  - name: containerName
+    value: 'a11y-scan-results'
+
+steps:
+  - checkout: self
+
+  - task: AzureCLI@2
+    displayName: 'Scan sites and upload results to Blob Storage'
+    inputs:
+      azureSubscription: $(serviceConnection)
+      scriptType: pscore
+      scriptPath: scripts/scan-and-store.ps1
+      arguments: >-
+        -ScannerUrl "$(SCANNER_URL)"
+        -StorageAccount "$(storageAccount)"
+        -ContainerName "$(containerName)"
+        -SiteUrls "$(APP_URL_001),$(APP_URL_002),$(APP_URL_003),$(APP_URL_004),$(APP_URL_005)"
+        -SiteKeys "a11y-demo-app-001,a11y-demo-app-002,a11y-demo-app-003,a11y-demo-app-004,a11y-demo-app-005"

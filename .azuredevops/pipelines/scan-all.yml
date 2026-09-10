@@ -1,0 +1,202 @@
+# Multi-repo scan dispatcher: Scan all demo apps in parallel
+# Equivalent of .github/workflows/scan-all.yml
+# Manual trigger only — calls scanner API for each app URL
+
+trigger: none
+pr: none
+
+parameters:
+  - name: scannerUrl
+    displayName: 'Scanner app base URL (leave default to use variable group)'
+    type: string
+    default: 'from-variable-group'
+
+variables:
+  - group: a11y-scan-config
+  - group: a11y-app-urls
+  - group: wiki-access
+  - name: effectiveScannerUrl
+    ${{ if eq(parameters.scannerUrl, 'from-variable-group') }}:
+      value: '$(SCANNER_URL)'
+    ${{ else }}:
+      value: '${{ parameters.scannerUrl }}'
+
+stages:
+  - stage: ScanApp001
+    displayName: 'Scan App 001 (Rust)'
+    dependsOn: []
+    jobs:
+      - template: templates/a11y-scan-job.yml
+        parameters:
+          scanName: 'a11y-demo-app-001'
+          scanUrl: $(APP_URL_001)
+          scannerBaseUrl: $(effectiveScannerUrl)
+
+  - stage: ScanApp002
+    displayName: 'Scan App 002 (C#)'
+    dependsOn: []
+    jobs:
+      - template: templates/a11y-scan-job.yml
+        parameters:
+          scanName: 'a11y-demo-app-002'
+          scanUrl: $(APP_URL_002)
+          scannerBaseUrl: $(effectiveScannerUrl)
+
+  - stage: ScanApp003
+    displayName: 'Scan App 003 (Java)'
+    dependsOn: []
+    jobs:
+      - template: templates/a11y-scan-job.yml
+        parameters:
+          scanName: 'a11y-demo-app-003'
+          scanUrl: $(APP_URL_003)
+          scannerBaseUrl: $(effectiveScannerUrl)
+
+  - stage: ScanApp004
+    displayName: 'Scan App 004 (Python)'
+    dependsOn: []
+    jobs:
+      - template: templates/a11y-scan-job.yml
+        parameters:
+          scanName: 'a11y-demo-app-004'
+          scanUrl: $(APP_URL_004)
+          scannerBaseUrl: $(effectiveScannerUrl)
+
+  - stage: ScanApp005
+    displayName: 'Scan App 005 (Go)'
+    dependsOn: []
+    jobs:
+      - template: templates/a11y-scan-job.yml
+        parameters:
+          scanName: 'a11y-demo-app-005'
+          scanUrl: $(APP_URL_005)
+          scannerBaseUrl: $(effectiveScannerUrl)
+
+  # -- Push SARIF to each demo app repo for Advanced Security code scanning --
+  - stage: CrossRepoPublish
+    displayName: 'Publish SARIF to Demo App Repos'
+    dependsOn:
+      - ScanApp001
+      - ScanApp002
+      - ScanApp003
+      - ScanApp004
+      - ScanApp005
+    condition: always()
+    jobs:
+      - job: PushSarif
+        displayName: 'Push SARIF and trigger Advanced Security'
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          matrix:
+            App001: { appId: '001' }
+            App002: { appId: '002' }
+            App003: { appId: '003' }
+            App004: { appId: '004' }
+            App005: { appId: '005' }
+        steps:
+          - checkout: none
+
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download SARIF artifact'
+            continueOnError: true
+            inputs:
+              artifact: 'sarif-a11y-demo-app-$(appId)'
+              path: $(Pipeline.Workspace)/sarif
+
+          - script: |
+              set -e
+              APP_REPO="a11y-demo-app-$(appId)"
+              ORG_URL="$(System.CollectionUri)"
+              PROJECT="$(System.TeamProject)"
+              ENCODED_PROJECT=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${PROJECT}', safe=''))")
+              REPO_URL="${ORG_URL}${ENCODED_PROJECT}/_git/${APP_REPO}"
+              AUTH_REPO_URL=$(echo "$REPO_URL" | sed "s|https://|https://x:${CROSS_REPO_PAT}@|")
+              SARIF_DIR="$(Pipeline.Workspace)/sarif"
+              BUILD_ID="$(Build.BuildId)"
+
+              if [ ! -d "$SARIF_DIR" ] || [ -z "$(ls -A $SARIF_DIR 2>/dev/null)" ]; then
+                echo "No SARIF files to upload for app $(appId)"
+                exit 0
+              fi
+
+              echo "Cloning ${APP_REPO}..."
+              git clone --depth 1 "$AUTH_REPO_URL" repo 2>&1 || {
+                echo "Could not clone ${APP_REPO}, skipping SARIF upload"
+                exit 0
+              }
+
+              mkdir -p repo/sarif-results
+
+              # Copy SARIF files
+              cp "$SARIF_DIR"/*.sarif repo/sarif-results/ 2>/dev/null || true
+
+              # Ensure publish-sarif pipeline exists in the repo
+              mkdir -p repo/.azuredevops/pipelines
+              cat > repo/.azuredevops/pipelines/publish-sarif.yml <<'PIPELINEEOF'
+              trigger:
+                paths:
+                  include:
+                  - sarif-results/*
+
+              pool:
+                vmImage: 'ubuntu-latest'
+
+              steps:
+              - checkout: self
+
+              - task: AdvancedSecurity-Publish@1
+                displayName: 'Publish SARIF to Advanced Security'
+                inputs:
+                  SarifsInputDirectory: '$(Build.SourcesDirectory)/sarif-results'
+              PIPELINEEOF
+              sed -i 's/^              //' repo/.azuredevops/pipelines/publish-sarif.yml
+
+              cd repo
+              git config user.email "pipeline@dev.azure.com"
+              git config user.name "Azure Pipeline"
+              git add sarif-results/ .azuredevops/
+              git diff --cached --quiet && echo "No new SARIF results" || {
+                git commit -m "Update a11y scan results (build ${BUILD_ID})"
+                git push origin main
+                echo "SARIF pushed to ${APP_REPO}"
+              }
+            displayName: 'Push SARIF to demo app repo'
+            continueOnError: true
+            env:
+              CROSS_REPO_PAT: $(WIKI_PAT)
+
+          - script: |
+              set -e
+              APP_REPO="a11y-demo-app-$(appId)"
+              PIPELINE_NAME="publish-sarif-$(appId)"
+
+              az extension add --name azure-devops --only-show-errors 2>/dev/null || true
+              az devops configure --defaults \
+                organization="$(System.CollectionUri)" \
+                project="$(System.TeamProject)"
+
+              # Create pipeline if it doesn't exist
+              PIPELINE_ID=$(az pipelines show --name "$PIPELINE_NAME" --query id -o tsv 2>/dev/null || echo "")
+              if [ -z "$PIPELINE_ID" ]; then
+                echo "Creating publish-sarif pipeline for ${APP_REPO}..."
+                az pipelines create \
+                  --name "$PIPELINE_NAME" \
+                  --yml-path ".azuredevops/pipelines/publish-sarif.yml" \
+                  --repository "$APP_REPO" \
+                  --repository-type tfsgit \
+                  --branch main \
+                  --folder-path '\Demo Apps' \
+                  --skip-first-run \
+                  -o none 2>&1 || echo "Could not create pipeline"
+              fi
+
+              # Trigger the pipeline
+              echo "Triggering publish-sarif pipeline for ${APP_REPO}..."
+              az pipelines run \
+                --name "$PIPELINE_NAME" \
+                -o none 2>&1 || echo "Could not trigger pipeline"
+            displayName: 'Create and trigger publish-sarif pipeline'
+            continueOnError: true
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(WIKI_PAT)

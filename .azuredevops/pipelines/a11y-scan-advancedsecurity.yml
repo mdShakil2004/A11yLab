@@ -1,0 +1,66 @@
+trigger: none
+
+schedules:
+  - cron: '0 6 * * 1' # Every Monday at 06:00 UTC
+    displayName: 'Weekly accessibility scan'
+    branches:
+      include:
+        - main
+    always: true
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: a11y-scan-config
+
+strategy:
+  matrix:
+    codepen-sample:
+      siteName: 'codepen-sample'
+      siteUrl: 'https://codepen.io/leezee/pen/eYbXzpJ'
+    a11y-scan-demo-app:
+      siteName: 'a11y-scan-demo-app'
+      siteUrl: '$(SCANNER_URL)'
+    ontario-gov:
+      siteName: 'ontario-gov'
+      siteUrl: 'https://www.ontario.ca/page/government-ontario'
+  maxParallel: 3
+
+steps:
+  - checkout: self
+    displayName: 'Checkout repository'
+
+  - script: |
+      mkdir -p results
+      HTTP_STATUS=$(curl -s -o results/$(siteName).sarif -w "%{http_code}" \
+        -X POST "$(SCANNER_URL)/api/ci/scan" \
+        -H "Content-Type: application/json" \
+        -d '{"url": "$(siteUrl)", "format": "sarif"}' \
+        --max-time 120)
+
+      echo "HTTP status: $HTTP_STATUS"
+
+      if [ "$HTTP_STATUS" -ne 200 ]; then
+        echo "##vso[task.logissue type=error]Scan failed for $(siteUrl) (HTTP $HTTP_STATUS)"
+        cat results/$(siteName).sarif
+        exit 1
+      fi
+
+      echo "SARIF file written: results/$(siteName).sarif"
+      echo "File size: $(wc -c < results/$(siteName).sarif) bytes"
+    displayName: 'Run accessibility scan - $(siteName)'
+    timeoutInMinutes: 5
+
+  - task: PublishBuildArtifacts@1
+    condition: always()
+    inputs:
+      pathToPublish: 'results'
+      artifactName: 'a11y-sarif-$(siteName)'
+    displayName: 'Publish SARIF artifact - $(siteName)'
+
+  - task: AdvancedSecurity-Publish@1
+    condition: always()
+    inputs:
+      SarifsInputDirectory: '$(Build.SourcesDirectory)/results'
+    displayName: 'Publish SARIF to Advanced Security - $(siteName)'

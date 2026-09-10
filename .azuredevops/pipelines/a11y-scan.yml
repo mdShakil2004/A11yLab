@@ -1,0 +1,64 @@
+trigger: none
+pr: none
+
+schedules:
+  - cron: '0 6 * * 1'
+    displayName: 'Weekly Monday 06:00 UTC scan'
+    branches:
+      include: [main]
+    always: true
+
+parameters:
+  - name: scanTargets
+    displayName: 'Override scan targets (leave empty for defaults)'
+    type: string
+    default: ''
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: a11y-scan-config
+
+strategy:
+  matrix:
+    codepen_sample:
+      scanName: 'codepen-sample'
+      scanUrl: 'https://codepen.io/leezee/pen/eYbXzpJ'
+    a11y_scan_demo_app:
+      scanName: 'a11y-scan-demo-app'
+      scanUrl: '$(SCANNER_URL)'
+    ontario_gov:
+      scanName: 'ontario-gov'
+      scanUrl: 'https://www.ontario.ca/page/government-ontario'
+
+steps:
+  - checkout: self
+
+  - script: |
+      mkdir -p results
+      HTTP_STATUS=$(curl -s -o results/$(scanName).sarif -w "%{http_code}" \
+        -X POST "$(SCANNER_URL)/api/ci/scan" \
+        -H "Content-Type: application/json" \
+        -d '{"url": "$(scanUrl)", "format": "sarif"}' \
+        --max-time 120)
+      echo "HTTP status: $HTTP_STATUS"
+      if [ "$HTTP_STATUS" -ne 200 ]; then
+        echo "##vso[task.logissue type=error]Scan failed for $(scanUrl) (HTTP $HTTP_STATUS)"
+        cat results/$(scanName).sarif
+        exit 1
+      fi
+    displayName: 'Run accessibility scan for $(scanName)'
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: 'results/$(scanName).sarif'
+      artifactName: 'sarif-$(scanName)'
+    condition: always()
+    displayName: 'Publish SARIF artifact'
+
+  # Optional: Upload to ADO Advanced Security (requires GHAzDO license)
+  # - task: AdvancedSecurity-Publish@1
+  #   inputs:
+  #     SarifFile: 'results/$(scanName).sarif'
+  #   condition: always()

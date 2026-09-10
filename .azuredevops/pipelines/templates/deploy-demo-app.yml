@@ -1,0 +1,205 @@
+# Reusable template: Demo app CI/CD deployment job
+# Produces a deployment job — the consuming pipeline defines stages.
+# Steps: create resource group, deploy Bicep infra, ACR build, deploy container to Web App.
+
+parameters:
+  - name: appName
+    type: string
+  - name: appNumber
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: serviceConnection
+    type: string
+    default: 'a11y-scanner-ado'
+  - name: location
+    type: string
+    default: 'canadacentral'
+  - name: repository
+    type: string
+    default: 'self'
+
+jobs:
+  - deployment: Deploy
+    displayName: 'Deploy ${{ parameters.appName }}'
+    environment: 'deploy-${{ parameters.appNumber }}'
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: ${{ parameters.repository }}
+              path: 'app'
+
+            - task: AzureCLI@2
+              displayName: 'Create resource group'
+              inputs:
+                azureSubscription: ${{ parameters.serviceConnection }}
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  az group create \
+                    --name ${{ parameters.resourceGroup }} \
+                    --location ${{ parameters.location }}
+
+            - task: AzureCLI@2
+              displayName: 'Deploy infrastructure'
+              inputs:
+                azureSubscription: ${{ parameters.serviceConnection }}
+                scriptType: bash
+                scriptLocation: inlineScript
+                workingDirectory: '$(Pipeline.Workspace)/app'
+                inlineScript: |
+                  az deployment group create \
+                    --resource-group ${{ parameters.resourceGroup }} \
+                    --name infra-deploy \
+                    --template-file infra/main.bicep \
+                    --parameters infra/main.parameters.json \
+                    --parameters imageTag=$(Build.BuildId)
+
+            - task: AzureCLI@2
+              displayName: 'Build and push Docker image'
+              inputs:
+                azureSubscription: ${{ parameters.serviceConnection }}
+                scriptType: bash
+                scriptLocation: inlineScript
+                workingDirectory: '$(Pipeline.Workspace)/app'
+                inlineScript: |
+                  ACR_NAME=$(az deployment group show \
+                    --resource-group ${{ parameters.resourceGroup }} \
+                    --name infra-deploy \
+                    --query 'properties.outputs.acrName.value' -o tsv)
+                  az acr build \
+                    --registry "$ACR_NAME" \
+                    --image ${{ parameters.appName }}:$(Build.BuildId) .
+
+            - task: AzureCLI@2
+              displayName: 'Deploy container to Web App'
+              inputs:
+                azureSubscription: ${{ parameters.serviceConnection }}
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  WEB_APP_NAME=$(az deployment group show \
+                    --resource-group ${{ parameters.resourceGroup }} \
+                    --name infra-deploy \
+                    --query 'properties.outputs.webAppName.value' -o tsv)
+                  ACR_LOGIN=$(az deployment group show \
+                    --resource-group ${{ parameters.resourceGroup }} \
+                    --name infra-deploy \
+                    --query 'properties.outputs.acrLoginServer.value' -o tsv)
+                  az webapp config container set \
+                    --name "$WEB_APP_NAME" \
+                    --resource-group ${{ parameters.resourceGroup }} \
+                    --container-image-name "$ACR_LOGIN/${{ parameters.appName }}:$(Build.BuildId)"
+                  az webapp restart \
+                    --name "$WEB_APP_NAME" \
+                    --resource-group ${{ parameters.resourceGroup }}
+
+            - task: AzureCLI@2
+              displayName: 'Get web app URL'
+              name: getUrl
+              inputs:
+                azureSubscription: ${{ parameters.serviceConnection }}
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  WEB_APP_URL=$(az deployment group show \
+                    --resource-group ${{ parameters.resourceGroup }} \
+                    --name infra-deploy \
+                    --query 'properties.outputs.webAppUrl.value' -o tsv)
+                  echo "##vso[task.setvariable variable=webAppUrl;isOutput=true]${WEB_APP_URL}"
+                  echo "Deployed to: ${WEB_APP_URL}"
+
+            - task: Bash@3
+              displayName: 'Take deployment screenshot'
+              name: screenshot
+              continueOnError: true
+              inputs:
+                targetType: inline
+                script: |
+                  WEB_APP_URL="$(getUrl.webAppUrl)"
+                  if [ -z "$WEB_APP_URL" ] || [ "$WEB_APP_URL" = "https://" ]; then
+                    echo "No web app URL available, skipping screenshot"
+                    echo "##vso[task.setvariable variable=screenshotTaken;isOutput=true]false"
+                    exit 0
+                  fi
+                  echo "Waiting 30s for app to stabilize..."
+                  sleep 30
+                  npx --yes playwright install --with-deps chromium
+                  npx playwright screenshot \
+                    --viewport-size="1280,900" \
+                    --wait-for-timeout=5000 \
+                    --full-page \
+                    "$WEB_APP_URL" \
+                    "$(Build.ArtifactStagingDirectory)/screenshot-${{ parameters.appNumber }}.png"
+                  echo "Screenshot captured for ${{ parameters.appName }}"
+                  echo "##vso[task.setvariable variable=screenshotTaken;isOutput=true]true"
+
+            - publish: $(Build.ArtifactStagingDirectory)/screenshot-${{ parameters.appNumber }}.png
+              artifact: screenshot-${{ parameters.appNumber }}
+              displayName: 'Publish screenshot artifact'
+              continueOnError: true
+              condition: eq(variables['screenshot.screenshotTaken'], 'true')
+
+            - script: |
+                set -e
+                WEB_APP_URL="$(getUrl.webAppUrl)"
+                BUILD_ID="$(Build.BuildId)"
+                ENCODED_PROJECT=$(python3 -c "import urllib.parse; print(urllib.parse.quote('AODA WCAG compliance'))")
+                BUILD_URL="$(System.CollectionUri)${ENCODED_PROJECT}/_build/results?buildId=${BUILD_ID}"
+                DEPLOY_DATE="$(date -u '+%Y-%m-%d %H:%M UTC')"
+                APP="${{ parameters.appName }}"
+                ATTACH_NAME="${APP}-${BUILD_ID}.png"
+                WIKI_REPO="https://$(WIKI_PAT)@dev.azure.com/MngEnvMCAP675646/${ENCODED_PROJECT}/_git/AODA-WCAG-compliance.wiki"
+                SCREENSHOT="$(Build.ArtifactStagingDirectory)/screenshot-${{ parameters.appNumber }}.png"
+
+                # Clone wiki repo (wikiMaster is the default branch for ADO project wikis)
+                git clone --depth 1 -b wikiMaster "$WIKI_REPO" wiki 2>/dev/null || \
+                  git clone --depth 1 "$WIKI_REPO" wiki 2>/dev/null || {
+                    echo "Wiki repo not found. Creating project wiki..."
+                    az devops wiki create --name 'AODA WCAG compliance' --type projectWiki \
+                      --org "https://dev.azure.com/MngEnvMCAP675646" --project 'AODA WCAG compliance' 2>/dev/null || true
+                    sleep 5
+                    git clone --depth 1 -b wikiMaster "$WIKI_REPO" wiki 2>/dev/null || {
+                      mkdir -p wiki && cd wiki && git init -b wikiMaster && git remote add origin "$WIKI_REPO" && cd ..
+                    }
+                  }
+                mkdir -p wiki/.attachments wiki/Deployments
+
+                if [ -f "$SCREENSHOT" ]; then
+                  cp "$SCREENSHOT" "wiki/.attachments/$ATTACH_NAME"
+                  SCREENSHOT_MD="![Deployment Screenshot](/.attachments/$ATTACH_NAME)"
+                else
+                  SCREENSHOT_MD="_No screenshot available_"
+                fi
+
+                cat > "wiki/Deployments/${APP}.md" <<EOF
+                # ${APP}
+
+                **Latest Deployment:** ${BUILD_ID}
+
+                **Date:** ${DEPLOY_DATE}
+
+                **Site:** [${WEB_APP_URL}](${WEB_APP_URL})
+
+                **Pipeline:** [Build ${BUILD_ID}](${BUILD_URL})
+
+                ---
+
+                ${SCREENSHOT_MD}
+                EOF
+                sed -i 's/^                //g' "wiki/Deployments/${APP}.md"
+
+                cd wiki
+                git config user.email "pipeline@dev.azure.com"
+                git config user.name "Azure Pipeline"
+                git add -A
+                git diff --cached --quiet && echo "No wiki changes" || {
+                  git commit -m "Update deployment page for ${APP} (build ${BUILD_ID})"
+                  git push origin HEAD:wikiMaster
+                  echo "Wiki updated: /Deployments/${APP}"
+                }
+              displayName: 'Update wiki with deployment screenshot'
+              continueOnError: true

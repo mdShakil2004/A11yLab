@@ -1,0 +1,499 @@
+# Multi-stage orchestrator: Deploy all demo apps + scanner in parallel, with optional teardown
+# Equivalent of .github/workflows/deploy-all.yml
+# Manual trigger only — dispatches deployment jobs via shared templates
+
+trigger: none
+pr: none
+
+variables:
+  - group: wiki-access
+
+parameters:
+  - name: teardown
+    displayName: 'Tear down all demo app resources after deployment'
+    type: boolean
+    default: false
+  - name: teardownScanDemo
+    displayName: 'Also tear down the scan demo app (rg-a11y-scan-demo)'
+    type: boolean
+    default: false
+
+resources:
+  repositories:
+    - repository: demo-app-001
+      type: git
+      name: 'AODA WCAG compliance/a11y-demo-app-001'
+      ref: refs/heads/main
+    - repository: demo-app-002
+      type: git
+      name: 'AODA WCAG compliance/a11y-demo-app-002'
+      ref: refs/heads/main
+    - repository: demo-app-003
+      type: git
+      name: 'AODA WCAG compliance/a11y-demo-app-003'
+      ref: refs/heads/main
+    - repository: demo-app-004
+      type: git
+      name: 'AODA WCAG compliance/a11y-demo-app-004'
+      ref: refs/heads/main
+    - repository: demo-app-005
+      type: git
+      name: 'AODA WCAG compliance/a11y-demo-app-005'
+      ref: refs/heads/main
+
+stages:
+  # -- Deploy demo apps (all in parallel) --
+  - stage: DeployApp001
+    displayName: 'Deploy App 001 (Rust)'
+    dependsOn: []
+    jobs:
+      - template: templates/deploy-demo-app.yml
+        parameters:
+          appName: 'a11y-demo-app-001'
+          appNumber: '001'
+          resourceGroup: 'rg-a11y-demo-app-001'
+          repository: 'demo-app-001'
+
+  - stage: DeployApp002
+    displayName: 'Deploy App 002 (C#)'
+    dependsOn: []
+    jobs:
+      - template: templates/deploy-demo-app.yml
+        parameters:
+          appName: 'a11y-demo-app-002'
+          appNumber: '002'
+          resourceGroup: 'rg-a11y-demo-app-002'
+          repository: 'demo-app-002'
+
+  - stage: DeployApp003
+    displayName: 'Deploy App 003 (Java)'
+    dependsOn: []
+    jobs:
+      - template: templates/deploy-demo-app.yml
+        parameters:
+          appName: 'a11y-demo-app-003'
+          appNumber: '003'
+          resourceGroup: 'rg-a11y-demo-app-003'
+          repository: 'demo-app-003'
+
+  - stage: DeployApp004
+    displayName: 'Deploy App 004 (Python)'
+    dependsOn: []
+    jobs:
+      - template: templates/deploy-demo-app.yml
+        parameters:
+          appName: 'a11y-demo-app-004'
+          appNumber: '004'
+          resourceGroup: 'rg-a11y-demo-app-004'
+          repository: 'demo-app-004'
+
+  - stage: DeployApp005
+    displayName: 'Deploy App 005 (Go)'
+    dependsOn: []
+    jobs:
+      - template: templates/deploy-demo-app.yml
+        parameters:
+          appName: 'a11y-demo-app-005'
+          appNumber: '005'
+          resourceGroup: 'rg-a11y-demo-app-005'
+          repository: 'demo-app-005'
+
+  # -- Deploy scanner app (parallel with demo apps) --
+  - stage: DeployScanner
+    displayName: 'Deploy Scanner App (Next.js)'
+    dependsOn: []
+    jobs:
+      - deployment: DeployScanner
+        displayName: 'Deploy Scan Demo App'
+        environment: 'deploy-scanner'
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: AzureCLI@2
+                  displayName: 'Create resource group'
+                  inputs:
+                    azureSubscription: 'a11y-scanner-ado'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az group create \
+                        --name rg-a11y-scan-demo \
+                        --location canadacentral
+
+                - task: AzureCLI@2
+                  displayName: 'Deploy infrastructure'
+                  inputs:
+                    azureSubscription: 'a11y-scanner-ado'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az deployment group create \
+                        --resource-group rg-a11y-scan-demo \
+                        --name infra-deploy \
+                        --template-file infra/main.bicep \
+                        --parameters infra/main.parameters.json \
+                        --parameters imageTag=$(Build.BuildId)
+
+                - task: AzureCLI@2
+                  displayName: 'Build and push Docker image'
+                  inputs:
+                    azureSubscription: 'a11y-scanner-ado'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      ACR_NAME=$(az deployment group show \
+                        --resource-group rg-a11y-scan-demo \
+                        --name infra-deploy \
+                        --query 'properties.outputs.acrName.value' -o tsv)
+                      az acr build \
+                        --registry "$ACR_NAME" \
+                        --image a11y-scan-demo:$(Build.BuildId) .
+
+                - task: AzureCLI@2
+                  displayName: 'Deploy container to Web App'
+                  inputs:
+                    azureSubscription: 'a11y-scanner-ado'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      WEB_APP_NAME=$(az deployment group show \
+                        --resource-group rg-a11y-scan-demo \
+                        --name infra-deploy \
+                        --query 'properties.outputs.webAppName.value' -o tsv)
+                      ACR_LOGIN=$(az deployment group show \
+                        --resource-group rg-a11y-scan-demo \
+                        --name infra-deploy \
+                        --query 'properties.outputs.acrLoginServer.value' -o tsv)
+                      az webapp config container set \
+                        --name "$WEB_APP_NAME" \
+                        --resource-group rg-a11y-scan-demo \
+                        --container-image-name "$ACR_LOGIN/a11y-scan-demo:$(Build.BuildId)"
+                      az webapp restart \
+                        --name "$WEB_APP_NAME" \
+                        --resource-group rg-a11y-scan-demo
+
+                - task: AzureCLI@2
+                  displayName: 'Get scanner URL'
+                  name: getScannerUrl
+                  inputs:
+                    azureSubscription: 'a11y-scanner-ado'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      WEB_APP_URL=$(az deployment group show \
+                        --resource-group rg-a11y-scan-demo \
+                        --name infra-deploy \
+                        --query 'properties.outputs.webAppUrl.value' -o tsv)
+                      echo "##vso[task.setvariable variable=webAppUrl;isOutput=true]${WEB_APP_URL}"
+                      echo "Scanner deployed to: ${WEB_APP_URL}"
+
+                - task: Bash@3
+                  displayName: 'Take scanner screenshot'
+                  name: screenshot
+                  continueOnError: true
+                  inputs:
+                    targetType: inline
+                    script: |
+                      WEB_APP_URL="$(getScannerUrl.webAppUrl)"
+                      if [ -z "$WEB_APP_URL" ] || [ "$WEB_APP_URL" = "https://" ]; then
+                        echo "No scanner URL available, skipping screenshot"
+                        echo "##vso[task.setvariable variable=screenshotTaken;isOutput=true]false"
+                        exit 0
+                      fi
+                      echo "Waiting 60s for scanner app to start (Next.js cold start)..."
+                      sleep 60
+                      npx --yes playwright install --with-deps chromium
+                      npx playwright screenshot \
+                        --viewport-size="1280,900" \
+                        --wait-for-timeout=10000 \
+                        --full-page \
+                        "$WEB_APP_URL" \
+                        "$(Build.ArtifactStagingDirectory)/screenshot-scanner.png"
+                      echo "Scanner screenshot captured"
+                      echo "##vso[task.setvariable variable=screenshotTaken;isOutput=true]true"
+
+                - publish: $(Build.ArtifactStagingDirectory)/screenshot-scanner.png
+                  artifact: screenshot-scanner
+                  displayName: 'Publish scanner screenshot'
+                  continueOnError: true
+                  condition: eq(variables['screenshot.screenshotTaken'], 'true')
+
+                - script: |
+                    set -e
+                    WEB_APP_URL="$(getScannerUrl.webAppUrl)"
+                    BUILD_ID="$(Build.BuildId)"
+                    ENCODED_PROJECT=$(python3 -c "import urllib.parse; print(urllib.parse.quote('AODA WCAG compliance'))")
+                    BUILD_URL="$(System.CollectionUri)${ENCODED_PROJECT}/_build/results?buildId=${BUILD_ID}"
+                    DEPLOY_DATE="$(date -u '+%Y-%m-%d %H:%M UTC')"
+                    APP="accessibility-scan-demo-app"
+                    ATTACH_NAME="${APP}-${BUILD_ID}.png"
+                    WIKI_REPO="https://$(WIKI_PAT)@dev.azure.com/MngEnvMCAP675646/${ENCODED_PROJECT}/_git/AODA-WCAG-compliance.wiki"
+                    SCREENSHOT="$(Build.ArtifactStagingDirectory)/screenshot-scanner.png"
+
+                    # Clone wiki repo (wikiMaster is the default branch for ADO project wikis)
+                    git clone --depth 1 -b wikiMaster "$WIKI_REPO" wiki 2>/dev/null || \
+                      git clone --depth 1 "$WIKI_REPO" wiki 2>/dev/null || {
+                        echo "Wiki repo not found. Creating project wiki..."
+                        az devops wiki create --name 'AODA WCAG compliance' --type projectWiki \
+                          --org "https://dev.azure.com/MngEnvMCAP675646" --project 'AODA WCAG compliance' 2>/dev/null || true
+                        sleep 5
+                        git clone --depth 1 -b wikiMaster "$WIKI_REPO" wiki 2>/dev/null || {
+                          mkdir -p wiki && cd wiki && git init -b wikiMaster && git remote add origin "$WIKI_REPO" && cd ..
+                        }
+                      }
+                    mkdir -p wiki/.attachments wiki/Deployments
+
+                    if [ -f "$SCREENSHOT" ]; then
+                      cp "$SCREENSHOT" "wiki/.attachments/$ATTACH_NAME"
+                      SCREENSHOT_MD="![Scanner Screenshot](/.attachments/$ATTACH_NAME)"
+                    else
+                      SCREENSHOT_MD="_No screenshot available_"
+                    fi
+
+                    cat > "wiki/Deployments/${APP}.md" <<EOF
+                    # Accessibility Scan Demo App (Scanner)
+
+                    **Latest Deployment:** ${BUILD_ID}
+
+                    **Date:** ${DEPLOY_DATE}
+
+                    **Site:** [${WEB_APP_URL}](${WEB_APP_URL})
+
+                    **Pipeline:** [Build ${BUILD_ID}](${BUILD_URL})
+
+                    ---
+
+                    ${SCREENSHOT_MD}
+                    EOF
+                    sed -i 's/^                    //g' "wiki/Deployments/${APP}.md"
+
+                    cd wiki
+                    git config user.email "pipeline@dev.azure.com"
+                    git config user.name "Azure Pipeline"
+                    git add -A
+                    git diff --cached --quiet && echo "No wiki changes" || {
+                      git commit -m "Update scanner deployment page (build ${BUILD_ID})"
+                      git push origin HEAD:wikiMaster
+                      echo "Wiki updated: /Deployments/${APP}"
+                    }
+                  displayName: 'Update wiki with scanner screenshot'
+                  continueOnError: true
+
+  # -- Update variable groups with real URLs --
+  - stage: UpdateUrls
+    displayName: 'Update Variable Groups with Deployed URLs'
+    dependsOn:
+      - DeployApp001
+      - DeployApp002
+      - DeployApp003
+      - DeployApp004
+      - DeployApp005
+      - DeployScanner
+    condition: succeeded()
+    jobs:
+      - job: UpdateVariableGroups
+        displayName: 'Update SCANNER_URL and APP_URL_001..005'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: AzureCLI@2
+            name: FetchUrls
+            displayName: 'Fetch deployed URLs from Azure'
+            inputs:
+              azureSubscription: 'a11y-scanner-ado'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -e
+
+                # Get scanner URL
+                SCANNER_URL=$(az deployment group show \
+                  --resource-group rg-a11y-scan-demo \
+                  --name infra-deploy \
+                  --query 'properties.outputs.webAppUrl.value' -o tsv)
+                echo "Scanner URL: $SCANNER_URL"
+                echo "##vso[task.setvariable variable=scannerUrl;isOutput=true]$SCANNER_URL"
+
+                # Get demo app URLs
+                for i in 001 002 003 004 005; do
+                  APP_URL=$(az deployment group show \
+                    --resource-group "rg-a11y-demo-app-$i" \
+                    --name infra-deploy \
+                    --query 'properties.outputs.webAppUrl.value' -o tsv 2>/dev/null || echo "")
+                  echo "App $i URL: $APP_URL"
+                  echo "##vso[task.setvariable variable=appUrl${i};isOutput=true]$APP_URL"
+                done
+
+          - bash: |
+              set -e
+
+              ORG_URL="$(System.CollectionUri)"
+              PROJECT="$(System.TeamProject)"
+              ENCODED_PROJECT=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${PROJECT}', safe=''))")
+              TOKEN="$SYSTEM_ACCESSTOKEN"
+
+              # Show which identity this token represents for diagnostics
+              echo "=== Token identity ==="
+              curl -s -H "Authorization: Bearer $TOKEN" \
+                "${ORG_URL}_apis/connectionData?api-version=7.1" \
+                | python3 -c "
+              import sys, json
+              data = json.load(sys.stdin)
+              user = data.get('authenticatedUser', {})
+              print(f\"  Identity: {user.get('providerDisplayName', 'unknown')}\")
+              print(f\"  ID: {user.get('id', 'unknown')}\")
+              " || echo "  Could not determine identity"
+
+              # Get project ID for security roles API
+              PROJECT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+                "${ORG_URL}_apis/projects/${ENCODED_PROJECT}?api-version=7.1" \
+                | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
+              echo "  Project ID: $PROJECT_ID"
+
+              # Get authenticated user ID for self-grant
+              BUILD_SERVICE_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+                "${ORG_URL}_apis/connectionData?api-version=7.1" \
+                | python3 -c "import sys,json; print(json.load(sys.stdin).get('authenticatedUser',{}).get('id',''))")
+
+              # Self-grant Administrator role on variable groups
+              for GROUP_NAME in a11y-scan-config a11y-app-urls; do
+                GROUP_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+                  "${ORG_URL}${ENCODED_PROJECT}/_apis/distributedtask/variablegroups?groupName=${GROUP_NAME}&api-version=7.1-preview.2" \
+                  | python3 -c "import sys,json; v=json.load(sys.stdin).get('value',[]); print(v[0]['id'] if v else '')")
+
+                if [ -n "$GROUP_ID" ] && [ -n "$BUILD_SERVICE_ID" ] && [ -n "$PROJECT_ID" ]; then
+                  echo "  Granting Administrator on '$GROUP_NAME' (group $GROUP_ID) to $BUILD_SERVICE_ID..."
+                  ROLE_BODY="[{\"roleName\":\"Administrator\",\"userId\":\"$BUILD_SERVICE_ID\"}]"
+                  GRANT_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d "$ROLE_BODY" \
+                    "${ORG_URL}_apis/securityroles/scopes/distributedtask.variablegroup/roleassignments/resources/${PROJECT_ID}\$${GROUP_ID}?api-version=7.1-preview.1")
+                  echo "  Grant result: HTTP $GRANT_CODE"
+                fi
+              done
+
+              update_variable() {
+                local GROUP_NAME="$1"
+                local VAR_NAME="$2"
+                local VAR_VALUE="$3"
+
+                if [ -z "$VAR_VALUE" ]; then
+                  echo "  Skipping $VAR_NAME (empty value)"
+                  return
+                fi
+
+                GROUP_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+                  "${ORG_URL}${ENCODED_PROJECT}/_apis/distributedtask/variablegroups?groupName=${GROUP_NAME}&api-version=7.1-preview.2" \
+                  | python3 -c "import sys,json; v=json.load(sys.stdin).get('value',[]); print(v[0]['id'] if v else '')")
+
+                if [ -z "$GROUP_ID" ]; then
+                  echo "  Variable group '$GROUP_NAME' not found"
+                  return 1
+                fi
+
+                local GROUP_JSON
+                GROUP_JSON=$(curl -s -H "Authorization: Bearer $TOKEN" \
+                  "${ORG_URL}${ENCODED_PROJECT}/_apis/distributedtask/variablegroups/${GROUP_ID}?api-version=7.1-preview.2")
+
+                local UPDATED_JSON
+                UPDATED_JSON=$(export _GROUP_JSON="$GROUP_JSON" _VAR_NAME="$VAR_NAME" _VAR_VALUE="$VAR_VALUE" && python3 -c "
+              import json, os
+              data = json.loads(os.environ['_GROUP_JSON'])
+              data['variables'][os.environ['_VAR_NAME']] = {'value': os.environ['_VAR_VALUE']}
+              json.dump(data, __import__('sys').stdout)")
+
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+                  -H "Authorization: Bearer $TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -d "$UPDATED_JSON" \
+                  "${ORG_URL}${ENCODED_PROJECT}/_apis/distributedtask/variablegroups/${GROUP_ID}?api-version=7.1-preview.2")
+
+                if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                  echo "  Updated $VAR_NAME in $GROUP_NAME (HTTP $HTTP_CODE)"
+                else
+                  echo "  ERROR updating $VAR_NAME in $GROUP_NAME (HTTP $HTTP_CODE)"
+                  return 1
+                fi
+              }
+
+              echo "=== Updating a11y-scan-config ==="
+              update_variable "a11y-scan-config" "SCANNER_URL" "$SCANNER_URL"
+
+              echo "=== Updating a11y-app-urls ==="
+              update_variable "a11y-app-urls" "APP_URL_001" "$APP_URL_001"
+              update_variable "a11y-app-urls" "APP_URL_002" "$APP_URL_002"
+              update_variable "a11y-app-urls" "APP_URL_003" "$APP_URL_003"
+              update_variable "a11y-app-urls" "APP_URL_004" "$APP_URL_004"
+              update_variable "a11y-app-urls" "APP_URL_005" "$APP_URL_005"
+
+              echo "Variable groups updated successfully"
+            displayName: 'Update variable groups via REST API'
+            continueOnError: true
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+              SCANNER_URL: $(FetchUrls.scannerUrl)
+              APP_URL_001: $(FetchUrls.appUrl001)
+              APP_URL_002: $(FetchUrls.appUrl002)
+              APP_URL_003: $(FetchUrls.appUrl003)
+              APP_URL_004: $(FetchUrls.appUrl004)
+              APP_URL_005: $(FetchUrls.appUrl005)
+
+  # -- Teardown (requires environment approval) --
+  - stage: Teardown
+    displayName: 'Teardown All Resources'
+    dependsOn:
+      - DeployApp001
+      - DeployApp002
+      - DeployApp003
+      - DeployApp004
+      - DeployApp005
+      - DeployScanner
+      - UpdateUrls
+    condition: and(succeeded(), eq('${{ parameters.teardown }}', 'true'))
+    jobs:
+      - deployment: TeardownAll
+        displayName: 'Delete all resource groups'
+        environment: 'teardown'
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: 'Delete demo app resource groups'
+                  inputs:
+                    azureSubscription: 'a11y-scanner-ado'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      for i in 001 002 003 004 005; do
+                        RG="rg-a11y-demo-app-$i"
+                        if az group exists --name "$RG" | grep -q true; then
+                          echo "Deleting resource group: $RG"
+                          az group delete --name "$RG" --yes --no-wait
+                        else
+                          echo "Resource group $RG does not exist, skipping."
+                        fi
+                      done
+
+                - task: AzureCLI@2
+                  displayName: 'Delete scanner resource group'
+                  condition: eq('${{ parameters.teardownScanDemo }}', 'true')
+                  inputs:
+                    azureSubscription: 'a11y-scanner-ado'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      if az group exists --name rg-a11y-scan-demo | grep -q true; then
+                        echo "Deleting resource group: rg-a11y-scan-demo"
+                        az group delete --name rg-a11y-scan-demo --yes --no-wait
+                      else
+                        echo "Resource group rg-a11y-scan-demo does not exist, skipping."
+                      fi

@@ -1,0 +1,13 @@
+ruleArchive: latest
+policies:
+  - IBM_Accessibility
+  - WCAG_2_1
+failLevels:
+  - violation
+  - potentialviolation
+reportLevels:
+  - violation
+  - potentialviolation
+  - recommendation
+outputFormat:
+  - json

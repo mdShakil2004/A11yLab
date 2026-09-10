@@ -1,0 +1,46 @@
+# Reusable template: Accessibility scan job
+# Scans a single URL via the scanner API and publishes the SARIF result.
+
+parameters:
+  - name: scanName
+    type: string
+  - name: scanUrl
+    type: string
+  - name: scannerBaseUrl
+    type: string
+
+jobs:
+  - job: Scan
+    displayName: 'Scan ${{ parameters.scanName }}'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+      - checkout: none
+
+      - script: |
+          mkdir -p results
+          HTTP_STATUS=$(curl -s -o results/${{ parameters.scanName }}.sarif -w "%{http_code}" \
+            -X POST "${{ parameters.scannerBaseUrl }}/api/ci/scan" \
+            -H "Content-Type: application/json" \
+            -d '{"url": "${{ parameters.scanUrl }}", "format": "sarif"}' \
+            --max-time 120)
+          echo "HTTP status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "##vso[task.logissue type=error]Scan failed for ${{ parameters.scanUrl }} (HTTP $HTTP_STATUS)"
+            cat results/${{ parameters.scanName }}.sarif
+            exit 1
+          fi
+        displayName: 'Run accessibility scan for ${{ parameters.scanName }}'
+
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: 'results/${{ parameters.scanName }}.sarif'
+          artifactName: 'sarif-${{ parameters.scanName }}'
+        condition: always()
+        displayName: 'Publish SARIF artifact'
+
+      # Optional: Upload to ADO Advanced Security (requires GHAzDO license)
+      # - task: AdvancedSecurity-Publish@1
+      #   inputs:
+      #     SarifFile: 'results/${{ parameters.scanName }}.sarif'
+      #   condition: always()
