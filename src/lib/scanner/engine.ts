@@ -1,4 +1,5 @@
-import { chromium, type BrowserContext, type Page, type FrameLocator } from 'playwright';
+import { chromium, type BrowserContext, type Page, type FrameLocator } from 'playwright-core';
+import chromiumBinary from '@sparticuz/chromium';
 import AxeBuilder from '@axe-core/playwright';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -339,7 +340,18 @@ export async function multiEngineScanWithStates(
 export interface ScanAuthOptions {
   storageState?: string | Awaited<ReturnType<BrowserContext['storageState']>>;
   extraHTTPHeaders?: Record<string, string>;
-  cookies?: import('playwright').Cookie[];
+  cookies?: import('playwright-core').Cookie[];
+}
+
+/**
+ * True when running inside a serverless/Lambda-style environment (Vercel
+ * Functions, AWS Lambda) where the filesystem is read-only/ephemeral and
+ * Playwright's own browser download is unavailable. In that case we launch
+ * via @sparticuz/chromium's bundled, serverless-compatible Chromium binary
+ * instead of the locally cached one from `npx playwright install`.
+ */
+function isServerlessEnv(): boolean {
+  return !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_VERSION;
 }
 
 /**
@@ -354,9 +366,12 @@ export async function scanUrl(
 ) {
   onProgress?.('navigating', 10);
 
+  const serverless = isServerlessEnv();
+
   const browser = await chromium.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: serverless ? chromiumBinary.args : ['--no-sandbox', '--disable-setuid-sandbox'],
+    executablePath: serverless ? await chromiumBinary.executablePath() : undefined,
   });
   const context = await browser.newContext({
     viewport: { width: 1280, height: 1024 },
