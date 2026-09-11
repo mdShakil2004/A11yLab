@@ -21,7 +21,7 @@
     "@azure/monitor-opentelemetry": "^1.16.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.57.0",
-    "@sparticuz/chromium": "^145.0.6",
+    "@sparticuz/chromium": "^149.0.0",
     "@swc/helpers": "^0.5.20",
     "accessibility-checker": "^4.0.13",
     "commander": "^14.0.3",
