@@ -10,20 +10,23 @@ const crawls = new Map<string, CrawlRecord>();
  * different instances. Use Upstash Redis when configured so crawl progress,
  * page scans, and reports survive instance changes. Local/in-memory storage
  * remains available for development when Redis is not configured.
- *
- * Supported environment variable pairs:
- * - UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
- * - KV_REST_API_URL / KV_REST_API_TOKEN (Vercel Marketplace integration)
  */
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 const redis = redisUrl && redisToken ? new Redis({ url: redisUrl, token: redisToken }) : null;
+const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
 
 const SCAN_TTL_SECONDS = 15 * 60;
 const CRAWL_TTL_SECONDS = 30 * 60;
 
 const crawlWriteChains = new Map<string, Promise<void>>();
 const scanWriteChains = new Map<string, Promise<void>>();
+
+function requireRedisOnVercel(): void {
+  if (isVercel && !redis) {
+    throw new Error('Durable crawl storage is not configured. Connect Upstash Redis and redeploy.');
+  }
+}
 
 function crawlKey(id: string): string {
   return `a11ylab:crawl:${id}`;
@@ -70,23 +73,21 @@ function queueScanPersist(record: ScanRecord): void {
   });
 }
 
-/** Awaitable persistence used by the API immediately after creating a job. */
 export async function persistCrawl(id: string): Promise<void> {
+  requireRedisOnVercel();
   const crawl = crawls.get(id);
   if (!crawl || !redis) return;
   queueCrawlPersist(crawl);
   await (crawlWriteChains.get(crawlKey(id)) ?? Promise.resolve());
 }
 
-/** Awaitable persistence used when an API needs a scan available remotely. */
 export async function persistScan(id: string): Promise<void> {
+  requireRedisOnVercel();
   const scan = scans.get(id);
   if (!scan || !redis) return;
   queueScanPersist(scan);
   await (scanWriteChains.get(scanKey(id)) ?? Promise.resolve());
 }
-
-// ---------- Scan CRUD ----------
 
 export function createScan(id: string, url: string): ScanRecord {
   const record: ScanRecord = {
@@ -123,8 +124,6 @@ export function updateScan(id: string, updates: Partial<ScanRecord>): void {
   }
 }
 
-// ---------- Crawl CRUD ----------
-
 export function createCrawl(id: string, seedUrl: string, config: CrawlConfig): CrawlRecord {
   const record: CrawlRecord = {
     id,
@@ -150,8 +149,11 @@ export function getCrawl(id: string): CrawlRecord | undefined {
 }
 
 export async function getCrawlAsync(id: string): Promise<CrawlRecord | undefined> {
+  requireRedisOnVercel();
+
   const local = crawls.get(id);
-  if (local || !redis) return local;
+  if (local) return local;
+  if (!redis) return undefined;
 
   const remote = await redis.get<Omit<CrawlRecord, 'abortController'>>(crawlKey(id));
   if (!remote) return undefined;
@@ -171,16 +173,12 @@ export function updateCrawl(id: string, updates: Partial<CrawlRecord>): void {
 
 export function deleteCrawl(id: string): void {
   crawls.delete(id);
-  if (redis) {
-    void redis.del(crawlKey(id));
-  }
+  if (redis) void redis.del(crawlKey(id));
 }
 
 export function getAllCrawls(): CrawlRecord[] {
   return Array.from(crawls.values());
 }
-
-// ---------- Local TTL Cleanup ----------
 
 const SCAN_TTL_MS = 15 * 60 * 1000;
 const CRAWL_TTL_MS = 30 * 60 * 1000;
