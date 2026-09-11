@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCrawl, getScan } from '@/lib/scanner/store';
+import { getCrawlAsync, getScanAsync } from '@/lib/scanner/store';
 import { generatePageSummaries } from '@/lib/scoring/site-calculator';
 
 export const runtime = 'nodejs';
@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const crawl = getCrawl(id);
+  const crawl = await getCrawlAsync(id);
 
   if (!crawl) {
     return NextResponse.json(
@@ -19,9 +19,9 @@ export async function GET(
     );
   }
 
-  const pageRecords = crawl.pageIds
-    .map((pid) => getScan(pid))
-    .filter((scan) => scan != null);
+  const pageRecords = (
+    await Promise.all(crawl.pageIds.map((pid) => getScanAsync(pid)))
+  ).filter((scan) => scan != null);
   const pagesCompleted = generatePageSummaries(pageRecords);
 
   return NextResponse.json(
