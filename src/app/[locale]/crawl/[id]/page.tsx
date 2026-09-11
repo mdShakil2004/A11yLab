@@ -37,7 +37,6 @@ export default function CrawlResultPage() {
       setCrawlData(data.crawl);
       setPages(data.pages || []);
       setState('results');
-      // Keep sessionStorage bounded; the completed result is now in React state.
       sessionStorage.removeItem(`a11ylab:crawl:${crawlId}`);
     } catch {
       setErrorMessage(t('networkError'));
@@ -59,20 +58,22 @@ export default function CrawlResultPage() {
     }));
   }
 
-  if (state === 'loading') {
-    return <div className="min-h-screen flex items-center justify-center p-8"><p className="text-gray-600">{tCommon('loading')}</p></div>;
+  function downloadReport() {
+    if (!crawlData) return;
+    const report = { crawl: crawlData, pages };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `a11ylab-wcag-report-${crawlId}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
+  if (state === 'loading') return <div className="min-h-screen flex items-center justify-center p-8"><p className="text-gray-600">{tCommon('loading')}</p></div>;
+
   if (state === 'error') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-8">
-        <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold text-red-600">{t('errorTitle')}</h1>
-          <p className="text-gray-600">{errorMessage}</p>
-          <Link href="/" className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">{tCommon('tryAgain')}</Link>
-        </div>
-      </div>
-    );
+    return <div className="min-h-screen flex flex-col items-center justify-center p-8"><div className="text-center space-y-4"><h1 className="text-2xl font-bold text-red-600">{t('errorTitle')}</h1><p className="text-gray-600">{errorMessage}</p><Link href="/" className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">{tCommon('tryAgain')}</Link></div></div>;
   }
 
   if (!crawlData) return null;
@@ -87,7 +88,7 @@ export default function CrawlResultPage() {
         </header>
 
         <div className="flex justify-center gap-3">
-          <a href={`/api/crawl/${crawlId}/pdf`} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-sm font-medium" download>{t('downloadPdf')}</a>
+          <button type="button" onClick={downloadReport} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-sm font-medium">Download Report</button>
           <Link href="/" className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm font-medium">{t('scanAnother')}</Link>
         </div>
 
