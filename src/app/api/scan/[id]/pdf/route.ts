@@ -7,6 +7,7 @@ import { generatePdf } from '@/lib/report/pdf-generator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 function isScanResults(value: unknown): value is ScanResults {
   if (!value || typeof value !== 'object') return false;
