@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { createCrawl, getCrawl } from '@/lib/scanner/store';
-import { startCrawl } from '@/lib/crawler/site-crawler';
 import type { CrawlConfig, CrawlRequest } from '@/lib/types/crawl';
 import { trackCrawlStart, trackCrawlComplete, trackCrawlError } from '@/lib/telemetry';
 import { createLogger } from '@/lib/logger';
+
+export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 const log = createLogger('api:crawl');
 
@@ -109,14 +111,17 @@ export async function POST(request: NextRequest) {
 
   const startTime = Date.now();
 
-  // Vercel/Next.js serverless functions must not start a long-running crawl
-  // as ordinary fire-and-forget work before returning the HTTP response.
-  // Use Next.js `after()` so the 202 response is returned immediately while
-  // the crawl is allowed to continue after the response is sent.
+  // Do not import Crawlee at module load time. The crawler has a large
+  // dependency graph and browser-related initialization; loading it while
+  // handling the POST can make a serverless request appear as a network
+  // failure before the 202 response is returned. Load it only after the
+  // response has been committed.
   after(async () => {
     const span = trackCrawlStart(crawlId, normalizedUrl);
     try {
+      const { startCrawl } = await import('@/lib/crawler/site-crawler');
       await startCrawl(crawlId, normalizedUrl, config);
+
       const crawl = getCrawl(crawlId);
       trackCrawlComplete(
         span,
