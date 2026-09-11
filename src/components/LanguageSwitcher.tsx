@@ -18,7 +18,7 @@ export default function LanguageSwitcher() {
           hrefLang="fr"
           className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         >
-          Français
+          ay11-lab
         </Link>
       ) : (
         <Link
