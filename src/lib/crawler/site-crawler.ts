@@ -1,4 +1,6 @@
 import { PlaywrightCrawler, Configuration, RequestQueue, purgeDefaultStorages, type PlaywrightCrawlingContext } from 'crawlee';
+import { chromium } from 'playwright-core';
+import chromiumBinary from '@sparticuz/chromium';
 import { v4 as uuidv4 } from 'uuid';
 import { scanPage } from '../scanner/engine';
 import { parseAxeResults } from '../scanner/result-parser';
@@ -12,6 +14,20 @@ export type ProgressCallback = (event: CrawlProgressEvent) => void;
 
 // Active AbortControllers keyed by crawlId
 const activeAbortControllers = new Map<string, AbortController>();
+
+/**
+ * True when running inside a serverless/Lambda-style environment (Vercel
+ * Functions, AWS Lambda) where the filesystem is read-only/ephemeral and
+ * Playwright's own browser download is unavailable. Mirrors the same check
+ * in scanner/engine.ts — kept local here to avoid a runtime import cycle.
+ */
+function isServerlessEnv(): boolean {
+  const hasVercelEnv = !!process.env.VERCEL || !!process.env.VERCEL_ENV;
+  const hasLambdaEnv = !!process.env.AWS_LAMBDA_FUNCTION_VERSION;
+  const looksLikeProdLinux =
+    process.platform !== 'win32' && process.env.NODE_ENV === 'production';
+  return hasVercelEnv || hasLambdaEnv || looksLikeProdLinux;
+}
 
 /**
  * Start a site crawl. Runs asynchronously, updates store as pages complete.
@@ -100,6 +116,13 @@ export async function startCrawl(
     const urlDepth = new Map<string, number>();
     urlDepth.set(primarySeed, 0);
 
+    // Resolve the serverless-compatible Chromium executable path once, up
+    // front, so it's ready before the crawler is constructed. Locally (dev,
+    // non-serverless) this stays undefined and Playwright falls back to the
+    // browser cached via `npx playwright install`, same as before.
+    const serverless = isServerlessEnv();
+    const executablePath = serverless ? await chromiumBinary.executablePath() : undefined;
+
     const crawler = new PlaywrightCrawler({
       maxRequestsPerCrawl: config.maxPages,
       maxConcurrency: config.concurrency,
@@ -107,15 +130,25 @@ export async function startCrawl(
       navigationTimeoutSecs: 30,
       requestQueue,
       launchContext: {
+        // Use our own playwright-core `chromium` launcher instead of letting
+        // Crawlee import the full `playwright` package internally. This is
+        // what keeps the Page type consistent with scanner/engine.ts (both
+        // now resolve to the same playwright-core types, avoiding the
+        // "Page is missing properties" TS error), and it's also what lets us
+        // point at @sparticuz/chromium's serverless binary on Vercel.
+        launcher: chromium,
         launchOptions: {
           headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--single-process',
-          ],
+          executablePath,
+          args: serverless
+            ? chromiumBinary.args
+            : [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--single-process',
+              ],
         },
       },
       browserPoolOptions: {
