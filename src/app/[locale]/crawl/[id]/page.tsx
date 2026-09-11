@@ -60,8 +60,7 @@ export default function CrawlResultPage() {
 
   function downloadReport() {
     if (!crawlData) return;
-    const report = { crawl: crawlData, pages };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ crawl: crawlData, pages }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -70,12 +69,8 @@ export default function CrawlResultPage() {
     URL.revokeObjectURL(url);
   }
 
-  if (state === 'loading') return <div className="min-h-screen flex items-center justify-center p-8"><p className="text-gray-600">{tCommon('loading')}</p></div>;
-
-  if (state === 'error') {
-    return <div className="min-h-screen flex flex-col items-center justify-center p-8"><div className="text-center space-y-4"><h1 className="text-2xl font-bold text-red-600">{t('errorTitle')}</h1><p className="text-gray-600">{errorMessage}</p><Link href="/" className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">{tCommon('tryAgain')}</Link></div></div>;
-  }
-
+  if (state === 'loading') return <div className="min-h-screen flex items-center justify-center p-8"><p className="text-gray-600">Loading crawl results...</p></div>;
+  if (state === 'error') return <div className="min-h-screen flex flex-col items-center justify-center p-8"><div className="text-center space-y-4"><h1 className="text-2xl font-bold text-red-600">{t('errorTitle')}</h1><p className="text-gray-600">{errorMessage}</p><Link href="/" className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">{tCommon('tryAgain')}</Link></div></div>;
   if (!crawlData) return null;
 
   return (
@@ -86,12 +81,10 @@ export default function CrawlResultPage() {
           <p className="text-gray-600"><a href={crawlData.seedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">{crawlData.seedUrl}</a></p>
           <p className="text-sm text-gray-500">{t('pagesScanned', { count: crawlData.completedPageCount })} · {t('started')} {new Date(crawlData.startedAt).toLocaleString()}</p>
         </header>
-
         <div className="flex justify-center gap-3">
           <button type="button" onClick={downloadReport} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-sm font-medium">Download Report</button>
           <Link href="/" className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm font-medium">{t('scanAnother')}</Link>
         </div>
-
         {crawlData.siteScore && <section aria-labelledby="site-score-heading"><h2 id="site-score-heading" className="text-xl font-semibold mb-4">{t('executiveSummary')}</h2><SiteScoreDisplay siteScore={crawlData.siteScore} /></section>}
         <section aria-labelledby="pages-heading"><h2 id="pages-heading" className="sr-only">{t('pageResults')}</h2><PageList pages={pages} crawlId={crawlId} /></section>
         {crawlData.aggregatedViolations && crawlData.aggregatedViolations.length > 0 && <section aria-labelledby="violations-heading"><h2 id="violations-heading" className="sr-only">{t('aggregatedViolations')}</h2><ViolationList violations={toAxeViolations(crawlData)} /></section>}
