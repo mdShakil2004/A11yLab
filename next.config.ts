@@ -26,12 +26,13 @@ const nextConfig: NextConfig = {
     "tesseract.js",
     "pngjs",
   ],
-  // @sparticuz/chromium loads its compressed Chromium binary from its
-  // package-local bin directory at runtime. Next's output-file tracing does
-  // not always discover those dynamically resolved assets, so include them
-  // explicitly in the Vercel serverless function.
+  // Runtime assets loaded through filesystem paths must be explicitly traced
+  // into the serverless function bundle.
   outputFileTracingIncludes: {
-    "/*": ["./node_modules/@sparticuz/chromium/bin/**/*"],
+    "/*": [
+      "./node_modules/@sparticuz/chromium/bin/**/*",
+      "./node_modules/axe-core/axe.min.js",
+    ],
   },
 };
 
