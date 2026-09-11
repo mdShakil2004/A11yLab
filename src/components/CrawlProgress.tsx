@@ -19,6 +19,8 @@ const gradeColors: Record<string, string> = {
 };
 
 const stages = ['pending', 'discovering', 'scanning', 'aggregating', 'complete'] as const;
+const POLL_INTERVAL_MS = 1000;
+const INITIAL_RETRY_LIMIT = 15;
 
 export default function CrawlProgress({ crawlId, onComplete, onError }: CrawlProgressProps) {
   const [progress, setProgress] = useState(0);
@@ -32,41 +34,82 @@ export default function CrawlProgress({ crawlId, onComplete, onError }: CrawlPro
   const t = useTranslations('CrawlProgress');
 
   useEffect(() => {
-    const eventSource = new EventSource(`/api/crawl/${crawlId}/status`);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let initialRetries = 0;
 
-    eventSource.onmessage = (event) => {
-      const data: CrawlProgressEvent = JSON.parse(event.data);
-      setProgress(data.progress);
-      setMessage(data.message);
-      setStatus(data.status);
-      setTotalPages(data.totalPages);
-      setCompletedPages(data.completedPages);
-      setFailedPages(data.failedPages);
-      setCurrentPage(data.currentPage);
+    const poll = async () => {
+      if (stopped) return;
 
-      if (data.pagesCompleted.length > 0) {
-        setRecentPages(data.pagesCompleted.slice(-5));
-      }
+      try {
+        const response = await fetch(`/api/crawl/${crawlId}/status`, {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        });
 
-      if (data.status === 'complete') {
-        eventSource.close();
-        onComplete();
-      } else if (data.status === 'error') {
-        eventSource.close();
-        onError(data.message);
-      } else if (data.status === 'cancelled') {
-        eventSource.close();
-        onError(t('cancelled'));
+        if (!response.ok) {
+          // The crawl can start on one warm serverless instance while the
+          // first status request is routed elsewhere. Treat an early 404 as
+          // transient and retry instead of immediately showing "connection lost".
+          if (response.status === 404 && initialRetries < INITIAL_RETRY_LIMIT) {
+            initialRetries += 1;
+            timer = setTimeout(poll, POLL_INTERVAL_MS);
+            return;
+          }
+
+          throw new Error(`Status request failed (${response.status})`);
+        }
+
+        initialRetries = 0;
+        const data: CrawlProgressEvent = await response.json();
+        if (stopped) return;
+
+        setProgress(data.progress);
+        setMessage(data.message);
+        setStatus(data.status);
+        setTotalPages(data.totalPages);
+        setCompletedPages(data.completedPages);
+        setFailedPages(data.failedPages);
+        setCurrentPage(data.currentPage);
+
+        if (data.pagesCompleted.length > 0) {
+          setRecentPages(data.pagesCompleted.slice(-5));
+        }
+
+        if (data.status === 'complete') {
+          onComplete();
+          return;
+        }
+
+        if (data.status === 'error') {
+          onError(data.message);
+          return;
+        }
+
+        if (data.status === 'cancelled') {
+          onError(t('cancelled'));
+          return;
+        }
+
+        timer = setTimeout(poll, POLL_INTERVAL_MS);
+      } catch (error) {
+        if (stopped) return;
+        // Network/proxy interruptions are retried. A transient Vercel
+        // connection reset should not terminate a long-running crawl UI.
+        initialRetries += 1;
+        if (initialRetries <= INITIAL_RETRY_LIMIT) {
+          timer = setTimeout(poll, POLL_INTERVAL_MS);
+        } else {
+          onError(error instanceof Error ? error.message : t('connectionLost'));
+        }
       }
     };
 
-    eventSource.onerror = () => {
-      eventSource.close();
-      onError(t('connectionLost'));
-    };
+    void poll();
 
     return () => {
-      eventSource.close();
+      stopped = true;
+      if (timer) clearTimeout(timer);
     };
   }, [crawlId, onComplete, onError, t]);
 
@@ -74,7 +117,6 @@ export default function CrawlProgress({ crawlId, onComplete, onError }: CrawlPro
     <div className="w-full max-w-2xl mx-auto p-6">
       <h2 className="text-xl font-semibold mb-4">{t('title')}</h2>
 
-      {/* Progress Bar */}
       <div
         role="progressbar"
         aria-valuenow={progress}
@@ -89,13 +131,11 @@ export default function CrawlProgress({ crawlId, onComplete, onError }: CrawlPro
         />
       </div>
 
-      {/* Status Text */}
       <div aria-live="polite" className="flex justify-between text-sm text-gray-600 mb-2">
         <span>{message || t('initializingCrawl')}</span>
         <span>{progress}%</span>
       </div>
 
-      {/* Page Counts */}
       <div className="flex gap-4 text-sm text-gray-600 mb-4">
         <span>{t('pagesCompleted', { completedPages, totalPages })}</span>
         {failedPages > 0 && (
@@ -103,14 +143,12 @@ export default function CrawlProgress({ crawlId, onComplete, onError }: CrawlPro
         )}
       </div>
 
-      {/* Current Page */}
       {currentPage && (
         <div className="text-sm text-gray-600 mb-4 truncate">
           {t('scanning')} <span className="font-mono text-xs">{currentPage}</span>
         </div>
       )}
 
-      {/* Stage Indicators */}
       <ol className="flex gap-2 text-xs text-gray-600 mb-6 list-none p-0 m-0" aria-label={t('crawlStages')}>
         {stages.map((stage) => (
           <li
@@ -127,7 +165,6 @@ export default function CrawlProgress({ crawlId, onComplete, onError }: CrawlPro
         ))}
       </ol>
 
-      {/* Recent Pages */}
       {recentPages.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('recentlyCompleted')}</h3>
