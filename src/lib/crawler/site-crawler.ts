@@ -207,8 +207,14 @@ export async function startCrawl(
         updateScan(pageId, { status: 'scanning', progress: 30, message: 'Running accessibility scan...' });
 
         try {
-          // Scan the page with axe-core
-          const axeResults = await scanPage(page);
+          // Scan the page with axe-core.
+          // Type assertion needed: Crawlee's PlaywrightCrawlingContext.page is
+          // statically typed against the full `playwright` package's Page
+          // type (regardless of the playwright-core launcher passed above),
+          // while scanPage() expects playwright-core's Page. Same types-only
+          // artifact as the launcher assertion above — the runtime object is
+          // a real Playwright Page either way.
+          const axeResults = await scanPage(page as any); // eslint-disable-line @typescript-eslint/no-explicit-any
           const scanResults = parseAxeResults(currentUrl, axeResults);
 
           // Store scan result
