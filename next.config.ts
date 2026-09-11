@@ -6,11 +6,9 @@ const withNextIntl = createNextIntlPlugin();
 const nextConfig: NextConfig = {
   output: "standalone",
 
-  // Crawlee and its browser stack contain mixed CommonJS/ESM dependencies.
-  // Let Next.js bundle/transpile Crawlee instead of leaving its dependency
-  // graph as raw server-side require() calls in the Vercel function.
+  // Bundle the direct Playwright crawler package so its mixed ESM/CJS
+  // dependency graph is handled by Next.js instead of Node's raw require().
   transpilePackages: [
-    "crawlee",
     "@crawlee/playwright",
     "@crawlee/browser-pool",
     "@crawlee/core",
@@ -28,13 +26,10 @@ const nextConfig: NextConfig = {
     "@sparticuz/chromium",
     "playwright",
     "playwright-core",
-    // OCR dependencies load worker/native assets at runtime.
     "tesseract.js",
     "pngjs",
   ],
 
-  // Runtime assets loaded through filesystem paths must be present in the
-  // standalone/serverless output.
   outputFileTracingIncludes: {
     "/*": [
       "./node_modules/@sparticuz/chromium/bin/**/*",
