@@ -243,7 +243,9 @@ function emitProgress(crawlId: string, completedPages: PageSummary[], onProgress
     status: crawl.status,
     progress: crawl.progress,
     message: crawl.message,
-    completedPages,
+    completedPages: completedPages.length,
+    failedPages: crawl.failedPageCount,
     totalPages: crawl.totalPageCount,
+    pagesCompleted: completedPages,
   });
 }
