@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import type { ScanResults } from '@/lib/types/scan';
 import { useTranslations } from 'next-intl';
 import ScoreDisplay from './ScoreDisplay';
@@ -11,6 +14,59 @@ interface ReportViewProps {
 
 export default function ReportView({ results, scanId }: ReportViewProps) {
   const t = useTranslations('ReportView');
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    setDownloadError(null);
+    setIsDownloading(true);
+
+    try {
+      // Send the results currently displayed on this page to the PDF endpoint.
+      // This avoids relying on the in-memory server store across Vercel instances.
+      const response = await fetch(`/api/scan/${scanId}/pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ results }),
+      });
+
+      if (!response.ok) {
+        let message = 'Unable to generate the PDF report.';
+        try {
+          const data = await response.json();
+          if (typeof data?.error === 'string') message = data.error;
+        } catch {
+          // Keep the generic message when the server did not return JSON.
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      if (!blob.size) {
+        throw new Error('The PDF report was empty.');
+      }
+
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = `wcag-report-${scanId}.pdf`;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    } catch (error) {
+      console.error('PDF download failed:', error);
+      setDownloadError(
+        error instanceof Error ? error.message : 'Unable to download the PDF report.'
+      );
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-8">
@@ -31,20 +87,28 @@ export default function ReportView({ results, scanId }: ReportViewProps) {
       </header>
 
       {/* PDF Download */}
-      <div className="flex justify-center gap-3">
-        <a
-          href={`/api/scan/${scanId}/pdf`}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-sm font-medium"
-          download
-        >
-          {t('downloadPdf')}
-        </a>
-        <Link
-          href="/"
-          className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
-        >
-          {t('scanAnother')}
-        </Link>
+      <div className="flex flex-col items-center gap-2">
+        <div className="flex justify-center gap-3">
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={isDownloading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-wait focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-sm font-medium"
+          >
+            {isDownloading ? 'Generating PDF…' : t('downloadPdf')}
+          </button>
+          <Link
+            href="/"
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+          >
+            {t('scanAnother')}
+          </Link>
+        </div>
+        {downloadError && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400 text-center max-w-xl">
+            {downloadError}
+          </p>
+        )}
       </div>
 
       {/* Executive Summary */}
