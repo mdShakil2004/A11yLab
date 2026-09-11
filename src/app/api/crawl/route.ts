@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { createCrawl, getCrawl } from '@/lib/scanner/store';
 import { startCrawl } from '@/lib/crawler/site-crawler';
@@ -97,17 +97,43 @@ export async function POST(request: NextRequest) {
   }
 
   const crawlId = uuidv4();
-  log.info('Crawl requested', { crawlId, url: url.trim(), maxPages: config.maxPages, maxDepth: config.maxDepth });
-  createCrawl(crawlId, url.trim(), config);
+  const normalizedUrl = url.trim();
 
-  // Start crawl asynchronously — do not await
+  log.info('Crawl requested', {
+    crawlId,
+    url: normalizedUrl,
+    maxPages: config.maxPages,
+    maxDepth: config.maxDepth,
+  });
+  createCrawl(crawlId, normalizedUrl, config);
+
   const startTime = Date.now();
-  const span = trackCrawlStart(crawlId, url.trim());
-  startCrawl(crawlId, url.trim(), config).then(() => {
-    const crawl = getCrawl(crawlId);
-    trackCrawlComplete(span, crawlId, url.trim(), Date.now() - startTime, crawl?.completedPageCount ?? 0, crawl?.failedPageCount ?? 0);
-  }).catch((error) => {
-    trackCrawlError(span, crawlId, url.trim(), error instanceof Error ? error.message : 'Crawl failed');
+
+  // Vercel/Next.js serverless functions must not start a long-running crawl
+  // as ordinary fire-and-forget work before returning the HTTP response.
+  // Use Next.js `after()` so the 202 response is returned immediately while
+  // the crawl is allowed to continue after the response is sent.
+  after(async () => {
+    const span = trackCrawlStart(crawlId, normalizedUrl);
+    try {
+      await startCrawl(crawlId, normalizedUrl, config);
+      const crawl = getCrawl(crawlId);
+      trackCrawlComplete(
+        span,
+        crawlId,
+        normalizedUrl,
+        Date.now() - startTime,
+        crawl?.completedPageCount ?? 0,
+        crawl?.failedPageCount ?? 0,
+      );
+    } catch (crawlError) {
+      trackCrawlError(
+        span,
+        crawlId,
+        normalizedUrl,
+        crawlError instanceof Error ? crawlError.message : 'Crawl failed',
+      );
+    }
   });
 
   return NextResponse.json({ crawlId }, { status: 202 });
