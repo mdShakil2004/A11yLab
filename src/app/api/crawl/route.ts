@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { createCrawl, getCrawl } from '@/lib/scanner/store';
+import { createCrawl, getCrawl, getScan } from '@/lib/scanner/store';
 import type { CrawlConfig, CrawlRequest } from '@/lib/types/crawl';
 import { trackCrawlStart, trackCrawlComplete, trackCrawlError } from '@/lib/telemetry';
 import { createLogger } from '@/lib/logger';
@@ -30,47 +30,18 @@ function validateConfig(body: CrawlRequest): { config: CrawlConfig; error?: stri
   const maxDepth = body.maxDepth ?? 3;
   const concurrency = body.concurrency ?? 3;
   const delayMs = body.delayMs ?? 1000;
-
-  if (maxPages < 1 || maxPages > 100) {
-    return { config: null as unknown as CrawlConfig, error: 'maxPages must be between 1 and 100' };
-  }
-  if (maxDepth < 1 || maxDepth > 10) {
-    return { config: null as unknown as CrawlConfig, error: 'maxDepth must be between 1 and 10' };
-  }
-  if (concurrency < 1 || concurrency > 5) {
-    return { config: null as unknown as CrawlConfig, error: 'concurrency must be between 1 and 5' };
-  }
-
-  return {
-    config: {
-      maxPages,
-      maxDepth,
-      concurrency,
-      delayMs,
-      includePatterns: body.includePatterns ?? [],
-      excludePatterns: body.excludePatterns ?? [],
-      respectRobotsTxt: body.respectRobotsTxt ?? true,
-      followSitemaps: body.followSitemaps ?? true,
-      domainStrategy: body.domainStrategy ?? 'same-hostname',
-    },
-  };
+  if (maxPages < 1 || maxPages > 100) return { config: null as unknown as CrawlConfig, error: 'maxPages must be between 1 and 100' };
+  if (maxDepth < 1 || maxDepth > 10) return { config: null as unknown as CrawlConfig, error: 'maxDepth must be between 1 and 10' };
+  if (concurrency < 1 || concurrency > 5) return { config: null as unknown as CrawlConfig, error: 'concurrency must be between 1 and 5' };
+  return { config: { maxPages, maxDepth, concurrency, delayMs, includePatterns: body.includePatterns ?? [], excludePatterns: body.excludePatterns ?? [], respectRobotsTxt: body.respectRobotsTxt ?? true, followSitemaps: body.followSitemaps ?? true, domainStrategy: body.domainStrategy ?? 'same-hostname' } };
 }
 
 export async function POST(request: NextRequest) {
   let body: CrawlRequest;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-  }
-
+  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const { url } = body;
-  if (!url || typeof url !== 'string') {
-    return NextResponse.json({ error: 'URL is required' }, { status: 400 });
-  }
-  if (!isValidScanUrl(url)) {
-    return NextResponse.json({ error: 'Invalid URL. Only public HTTP/HTTPS URLs are allowed.' }, { status: 400 });
-  }
+  if (!url || typeof url !== 'string') return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+  if (!isValidScanUrl(url)) return NextResponse.json({ error: 'Invalid URL. Only public HTTP/HTTPS URLs are allowed.' }, { status: 400 });
 
   const { config, error } = validateConfig(body);
   if (error) return NextResponse.json({ error }, { status: 400 });
@@ -84,23 +55,31 @@ export async function POST(request: NextRequest) {
   const span = trackCrawlStart(crawlId, normalizedUrl);
 
   try {
-    // Vercel Functions are stateless. Without an external store, the crawl
-    // must finish inside this same invocation instead of using after() and
-    // cross-request polling against an in-memory Map.
+    // No Redis and no background job. The crawl and all page scans finish in
+    // this same function invocation, so the in-memory records remain valid.
     const { startCrawl } = await import('@/lib/crawler/site-crawler');
     await startCrawl(crawlId, normalizedUrl, config);
 
     const crawl = getCrawl(crawlId);
-    trackCrawlComplete(
-      span,
-      crawlId,
-      normalizedUrl,
-      Date.now() - startTime,
-      crawl?.completedPageCount ?? 0,
-      crawl?.failedPageCount ?? 0,
-    );
+    if (!crawl) throw new Error('Crawl result was lost before completion.');
 
-    return NextResponse.json({ crawlId, status: crawl?.status ?? 'complete', progress: crawl?.progress ?? 100 });
+    const pages = crawl.pageIds
+      .map((pageId) => getScan(pageId))
+      .filter((page): page is NonNullable<typeof page> => Boolean(page))
+      .map((page) => ({
+        pageId: page.id,
+        url: page.url,
+        score: page.results?.score.overallScore ?? 0,
+        grade: page.results?.score.grade ?? 'F',
+        violationCount: page.results?.violations.length ?? 0,
+        passCount: page.results?.passes.length ?? 0,
+        status: page.status,
+        scannedAt: page.completedAt ?? page.startedAt,
+      }));
+
+    trackCrawlComplete(span, crawlId, normalizedUrl, Date.now() - startTime, crawl.completedPageCount, crawl.failedPageCount);
+
+    return NextResponse.json({ crawlId, status: crawl.status, progress: crawl.progress, crawl, pages });
   } catch (crawlError) {
     const message = crawlError instanceof Error ? crawlError.message : 'Crawl failed';
     trackCrawlError(span, crawlId, normalizedUrl, message);
