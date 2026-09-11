@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { createCrawl, getCrawl } from '@/lib/scanner/store';
+import { createCrawl, getCrawl, persistCrawl } from '@/lib/scanner/store';
 import type { CrawlConfig, CrawlRequest } from '@/lib/types/crawl';
 import { trackCrawlStart, trackCrawlComplete, trackCrawlError } from '@/lib/telemetry';
 import { createLogger } from '@/lib/logger';
@@ -24,7 +24,6 @@ function isValidScanUrl(input: string): boolean {
 
   const hostname = parsed.hostname;
 
-  // Block private/internal IPs (SSRF prevention)
   if (
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
@@ -107,15 +106,26 @@ export async function POST(request: NextRequest) {
     maxPages: config.maxPages,
     maxDepth: config.maxDepth,
   });
+
   createCrawl(crawlId, normalizedUrl, config);
+
+  // Persist the job before returning. This is required because the progress
+  // requests can be routed to a different Vercel Function instance.
+  try {
+    await persistCrawl(crawlId);
+  } catch (error) {
+    log.error('Failed to persist crawl job', {
+      crawlId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json(
+      { error: 'Crawl storage is not configured. Connect Upstash Redis to this Vercel project and redeploy.' },
+      { status: 503 },
+    );
+  }
 
   const startTime = Date.now();
 
-  // Do not import Crawlee at module load time. The crawler has a large
-  // dependency graph and browser-related initialization; loading it while
-  // handling the POST can make a serverless request appear as a network
-  // failure before the 202 response is returned. Load it only after the
-  // response has been committed.
   after(async () => {
     const span = trackCrawlStart(crawlId, normalizedUrl);
     try {
