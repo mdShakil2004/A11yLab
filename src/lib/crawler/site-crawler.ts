@@ -136,7 +136,17 @@ export async function startCrawl(
         // now resolve to the same playwright-core types, avoiding the
         // "Page is missing properties" TS error), and it's also what lets us
         // point at @sparticuz/chromium's serverless binary on Vercel.
-        launcher: chromium,
+        //
+        // Type assertion needed: Crawlee's PlaywrightLaunchContext types
+        // `launcher` against the full `playwright` package's BrowserType,
+        // not `playwright-core`'s. The two are structurally near-identical
+        // (playwright is a thin wrapper around playwright-core) and the
+        // runtime object works correctly either way — this mismatch is a
+        // types-only artifact of having two separately-versioned copies of
+        // playwright-core in node_modules (top-level, and nested under
+        // playwright/node_modules via @playwright/test), not a real
+        // incompatibility.
+        launcher: chromium as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         launchOptions: {
           headless: true,
           executablePath,
