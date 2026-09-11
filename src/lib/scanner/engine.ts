@@ -349,9 +349,21 @@ export interface ScanAuthOptions {
  * Playwright's own browser download is unavailable. In that case we launch
  * via @sparticuz/chromium's bundled, serverless-compatible Chromium binary
  * instead of the locally cached one from `npx playwright install`.
+ *
+ * Checks multiple signals rather than relying on a single env var, since
+ * Vercel's System Environment Variables exposure can vary by project setting:
+ *   - VERCEL / VERCEL_ENV: set by Vercel on both build and runtime by default
+ *   - AWS_LAMBDA_FUNCTION_VERSION: set on raw AWS Lambda / other providers
+ *   - platform !== 'win32' && NODE_ENV === 'production': catches the case
+ *     where the above env vars are stripped, since local dev is always
+ *     Windows here and production Linux functions never are.
  */
 function isServerlessEnv(): boolean {
-  return !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_VERSION;
+  const hasVercelEnv = !!process.env.VERCEL || !!process.env.VERCEL_ENV;
+  const hasLambdaEnv = !!process.env.AWS_LAMBDA_FUNCTION_VERSION;
+  const looksLikeProdLinux =
+    process.platform !== 'win32' && process.env.NODE_ENV === 'production';
+  return hasVercelEnv || hasLambdaEnv || looksLikeProdLinux;
 }
 
 /**
